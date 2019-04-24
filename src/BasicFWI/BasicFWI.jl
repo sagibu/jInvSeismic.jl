@@ -4,7 +4,7 @@ using jInv.Utils
 using Distributed
 using SparseArrays
 using LinearAlgebra
-
+using DelimitedFiles
 
 export FWIparam
 import jInv.ForwardShare.ForwardProbType
@@ -32,6 +32,7 @@ mutable struct FWIparam <: ForwardProbType
     Mesh      # Mesh
 	Fields    # Fields
 	Ainv      # LU factorization
+	TEmat	  # matrix to reduce dimension for trace estimation
 end
 
 export getFWIparam
@@ -41,7 +42,7 @@ export getFWIparam
 	constructs FWI param
 
 """
-function getFWIparam(omega,gamma,Q,P,Mesh,doDistribute=false)
+function getFWIparam(omega,gamma,Q,P,Mesh,TEmat,doDistribute=false)
     nfreq = length(omega)
 
     if doDistribute && (nfreq > 1)
@@ -70,7 +71,7 @@ function getFWIparam(omega,gamma,Q,P,Mesh,doDistribute=false)
             end
         end
     else
-        pFor = FWIparam(omega,gamma,Q,P,Mesh,[],[])
+        pFor = FWIparam(omega,gamma,Q,P,Mesh,[],[], TEmat)
     end
     return pFor
 end
