@@ -83,8 +83,8 @@ P = sdiag(vec(p))
 P = P[:,(LinearIndices(sum(P,dims=2) .!= 0))[findall(sum(P,dims=2) .!= 0)]]
 nrec = size(P,2)
 println(size(P))
-pFor  = getFWIparam(omega,gamma,Q,P,Mr,I)
-pForp = getFWIparam(omega,gamma,Q,P,Mr,I,true)
+pFor  = getFWIparam(omega,gamma,Q,P,Mr)
+pForp = getFWIparam(omega,gamma,Q,P,Mr,true)
 
 # inversion mesh and forward mesh are the same here
 M2Mp = ones(length(pForp))

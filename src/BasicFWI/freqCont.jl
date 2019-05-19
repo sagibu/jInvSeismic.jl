@@ -72,7 +72,7 @@ Dc = 0;
 flag = -1;
 HIS = [];
 
-println("NEW FREQ CONT");
+println("NEW FREQ CONT556");
 for freqIdx = startFrom:nfreq
 	println("start freqCont iteration from: ", freqIdx)
 	tstart = time_ns();
@@ -80,6 +80,7 @@ for freqIdx = startFrom:nfreq
 
 	eta = 20.0;
 	DobsNew = copy(Dobs[:])
+	TEmat = rand([-1,1],(size(DobsNew[1],2),10));
 	println("size DobsNew: ", size(DobsNew) );
 	println("size DobsNew: ", size(DobsNew[1], 2) );
 	WdEta = eta.*Wd;
@@ -105,21 +106,34 @@ for freqIdx = startFrom:nfreq
 	end
 	WdNew = Array{Array}(undef, nfreq);
 	for i=1:nfreq
-		WdNew[i] = ones((size(DobsNew[1], 1), size(DobsNew[1], 2)));
+		WdNew[i] = ones((size(DobsNew[1], 1), 10))./sqrt(10);
 	end
 	println(size(Wd), " ,", size(WdNew));
 	println(size(Wd[1]), " ,", size(WdNew[1]));
 	println(size(Dobs), " ,", size(DobsNew));
 	println(size(Dobs[1]), " ,", size(DobsNew[1]));
-	pMis = getMisfitParam(pFor, WdNew, DobsNew, misfun, Iact, mback);
+	# pMis = getMisfitParam(pFor, WdNew, DobsNew, misfun, Iact, mback);
 	#
+	for i=1:nfreq
+		DobsNew[i] = DobsNew[i][:,:] * TEmat;
+	end
 	reqIdx1 = freqIdx;
 	if freqIdx > 1
 		reqIdx1 = max(1,freqIdx-windowSize+1);
 	end
 	reqIdx2 = freqIdx;
 	currentProblems = reqIdx1:reqIdx2;
+	pForNew = Array{RemoteChannel}(undef, nfreq);
+	for i=1:nfreq
+		pForTemp = fetch(pFor[i]);
+		pForTemp.Sources = pForTemp.originalSources * TEmat;
+		pForNew[i] = initRemoteChannel(x->x, pFor[i].where, pForTemp);
+	end
 	println("\n======= New Continuation Stage: selecting continuation batches: ",reqIdx1," to ",reqIdx2,"=======\n");
+	println("size dobs ", size(DobsNew[1]));
+	println("size wd ", size(WdNew[1]));
+	# println("size Q ", size(DobsNew[1]));
+	pMis = getMisfitParam(pForNew, WdNew, DobsNew, misfun, Iact, mback);
 	pMisTemp = pMis[currentProblems];
 
 	pInv.mref = mc[:];
@@ -144,7 +158,10 @@ for freqIdx = startFrom:nfreq
     println((tend - tstart)/1.0e9);
 end
 pInv.maxIter = 10;
-mc,Dc,flag,His = projGNCG(mc,pInv,pMis,dumpResults = dumpGN);
+function dumpGN2(mc,Dc,iter,pInv,PF)
+	dumpFun(mc,Dc,iter,pInv,PF,"FINAL.dat");
+end
+mc,Dc,flag,His = projGNCG(mc,pInv,pMis,dumpResults = dumpGN2);
 return mc,Dc,flag,HIS;
 end
 
