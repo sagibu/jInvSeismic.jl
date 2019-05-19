@@ -18,7 +18,7 @@ function solveForwardProblem(m::Array{Float64, 2}, pForp::Array{RemoteChannel}, 
 	end
 	Wd = Array{Array}(undef, nfreq);
 	for k=1:length(Dobs)
-		Wd[k] = 1.0./(Dobs[k] .+ 1e-2*maximum(abs.(Dobs[k])));
+		Wd[k] = 1.0./(abs.(real.(Dobs[k])) .+ 1e-1*mean(abs.(Dobs[k])));
 	end
 
 	return Dobs, Wd;

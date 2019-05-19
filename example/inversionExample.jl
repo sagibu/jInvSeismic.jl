@@ -36,37 +36,23 @@ for i=1:nfreq
 	imshow(Dobs[i][:,:]);
 end
 
-TEmat = rand([-1,1],(nsrc,5));
-pForpTE = getFWIparam(omega,gamma,Q,P,Mr,TEmat,true)
-bla, = getData(vec(m),pForpTE)
-for k=1:length(bla)
-	wait(bla[k]);
+
+function plotModelResult(model)
+	close(888);
+	figure(888);
+	imshow(model);colorbar();
+	pause(1.0);
 end
-blaobs = Array{Array}(undef, nfreq);
-for k=1:length(bla)
-	blaobs[k] = fetch(bla[k]);
-end
-println(size(blaobs))
-println(size(blaobs[1]))
-figure(99);
-imshow(blaobs[1][:,:]);
-#
-# function plotModelResult(model)
-# 	close(888);
-# 	figure(888);
-# 	imshow(model);colorbar();
-# 	pause(1.0);
-# end
-# nx = size(m)[1];
-# nz = size(m)[2];
-#
-# figure(22);
-# imshow(mref'); colorbar();
-#
-# mc, Dc, pInv, Iact, mback = solveInverseProblem(pForp, Dobs, Wd, nfreq, nx, nz, mref,
-# 												Mr, 0.5, 0.035,"FWI.dat", true, plotModelResult);
-#
-# #Show results
+nx = size(m)[1];
+nz = size(m)[2];
+
+figure(22);
+imshow(mref'); colorbar();
+
+mc, Dc, pInv, Iact, mback = solveInverseProblem(pForp, Dobs, Wd, nfreq, nx, nz, mref,
+												Mr, 0.5, 0.035,"FWI.dat", false, plotModelResult);
+
+#Show results
 # fullMc = reshape(Iact*pInv.modelfun(mc)[1] + mback,tuple((pInv.MInv.n)...));
 # println("Model error:");
 # println(norm(fullMc.-m));
