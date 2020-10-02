@@ -50,28 +50,37 @@ modelDir 	= pwd();
 ########################################################################################################
 
 ########## uncomment block for SEG ###############
-
-dim     = 2;
-pad     = 30;
-jumpSrc = 5;
-newSize = [600,300];
-
-# (m,Minv,mref,boundsHigh,boundsLow) = readModelAndGenerateMeshMref(modelDir,"../../SEGmodel2Dsalt.dat",dim,pad,[0.0,13.5,0.0,4.2],newSize,1.752,2.9);
-#(m,Minv,mref,boundsHigh,boundsLow) = readModelAndGenerateMeshMref(modelDir,"examples/SEGmodel2D_edges.dat",dim,pad,[0.0,13.5,0.0,4.2],newSize,1.752,2.9, false);
-(m,Minv,mref,boundsHigh,boundsLow) = readModelAndGenerateMeshMref(modelDir,"examples/SEGmodel2D_up.dat",dim,pad,[0.0,13.5,0.0,4.2],newSize,1.752,2.9, false);
-#omega = [2.0,2.5,3.0,3.5,4.5,5.5,6.5]*2*pi; #SEG
-omega = Array(3.0:0.3:6.0)*2*pi;
-offset  = newSize[1];  #ceil(Int64,(newSize[1]*(8.0/13.5)));
-println("Offset is: ",offset," cells.")
-
-alpha1 = 5e-1;
-alpha2 = 5e2;
-# stepReg = 1e4; #1e2;#4e+3
+#
+# dim     = 2;
+# pad     = 30;
+# jumpSrc = 5;
+# newSize = [600,300];
+#
+# # (m,Minv,mref,boundsHigh,boundsLow) = readModelAndGenerateMeshMref(modelDir,"../../SEGmodel2Dsalt.dat",dim,pad,[0.0,13.5,0.0,4.2],newSize,1.752,2.9);
+# #(m,Minv,mref,boundsHigh,boundsLow) = readModelAndGenerateMeshMref(modelDir,"examples/SEGmodel2D_edges.dat",dim,pad,[0.0,13.5,0.0,4.2],newSize,1.752,2.9, false);
+# (m,Minv,mref,boundsHigh,boundsLow) = readModelAndGenerateMeshMref(modelDir,"examples/SEGmodel2D_up.dat",dim,pad,[0.0,13.5,0.0,4.2],newSize,1.752,2.9, false);
+# #omega = [2.0,2.5,3.0,3.5,4.5,5.5,6.5]*2*pi; #SEG
+# omega = Array(3.0:0.3:6.0)*2*pi;
+# offset  = newSize[1];  #ceil(Int64,(newSize[1]*(8.0/13.5)));
+# println("Offset is: ",offset," cells.")
+#
+# alpha1 = 5e-1;
+# alpha2 = 5e2;
+# # stepReg = 1e4; #1e2;#4e+3
 
 ##################################################
 
 
+########## uncomment block for overthrust slice ###############
 
+include(string(FWIDriversPath,"generateMrefOverthrust.jl"));
+omega = Array(3.0:0.5:6.0)*2*pi; #Marmousi
+
+alpha1 = 1e1;
+alpha2 = 1e1;
+# stepReg = 1e4; #1e2;#4e+3
+
+#######################################################
 
 
 ########## uncomment block for marmousi ###############
@@ -105,12 +114,15 @@ workersFWI = workers();
 println(string("The workers that we allocate for FWI are:",workersFWI));
 
 
-
+figure(14);
+imshow(m, clim = [2.5,6.0]);colorbar();
+figure(15);
+imshow(mref)
 figure(1,figsize = (22,10));
-plotModel(m,includeMeshInfo=true,M_regular = Minv,cutPad=pad,limits=[1.5,4.5],figTitle="orig");
+plotModel(m,includeMeshInfo=true,M_regular = Minv,cutPad=pad,limits=[2.5,6.0],figTitle="orig");
 
 figure(2,figsize = (22,10));
-plotModel(mref,includeMeshInfo=true,M_regular = Minv,cutPad=pad,limits=[1.5,4.5],figTitle="mref");
+plotModel(mref,includeMeshInfo=true,M_regular = Minv,cutPad=pad,limits=[2.5,6.0],figTitle="mref");
 
 prepareFWIDataFiles(m,Minv,mref,boundsHigh,boundsLow,dataFilenamePrefix,omega,ones(ComplexF64,size(omega)),
 									pad,ABLpad,jumpSrc,offset,workersFWI,maxBatchSize,Ainv,useFilesForFields);
