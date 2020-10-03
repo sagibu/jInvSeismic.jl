@@ -74,7 +74,7 @@ modelDir 	= pwd();
 ########## uncomment block for overthrust slice ###############
 
 include(string(FWIDriversPath,"generateMrefOverthrust.jl"));
-omega = Array(3.0:0.5:6.0)*2*pi; #Marmousi
+omega = Array(3.0:0.8:10.0)*2*pi; #Marmousi
 
 alpha1 = 1e1;
 alpha2 = 1e1;
@@ -119,10 +119,10 @@ imshow(m, clim = [2.5,6.0]);colorbar();
 figure(15);
 imshow(mref)
 figure(1,figsize = (22,10));
-plotModel(m,includeMeshInfo=true,M_regular = Minv,cutPad=pad,limits=[2.5,6.0],figTitle="orig");
+plotModel(m,includeMeshInfo=true,M_regular = Minv,cutPad=pad,limits=[2.5,6.0],figTitle="orig",filename="orig.png");
 
-figure(2,figsize = (22,10));
-plotModel(mref,includeMeshInfo=true,M_regular = Minv,cutPad=pad,limits=[2.5,6.0],figTitle="mref");
+#figure(2,figsize = (22,10));
+#plotModel(mref,includeMeshInfo=true,M_regular = Minv,cutPad=pad,limits=[2.5,6.0],figTitle="mref",filename="mref.png");
 
 prepareFWIDataFiles(m,Minv,mref,boundsHigh,boundsLow,dataFilenamePrefix,omega,ones(ComplexF64,size(omega)),
 									pad,ABLpad,jumpSrc,offset,workersFWI,maxBatchSize,Ainv,useFilesForFields);
@@ -159,7 +159,6 @@ end
 (Q,P,pMis,SourcesSubInd,contDiv,Iact,sback,mref,boundsHigh,boundsLow) =
 	setupFWI(m,dataFilenamePrefix,plotting,workersFWI,maxBatchSize,Ainv,SSDFun,useFilesForFields);
 
-
 ########################################################################################################
 # Setting up the inversion for slowness instead of velocity:
 ########################################################################################################
@@ -181,7 +180,7 @@ function dump(mc,Dc,iter,pInv,PMis,resultsFilename)
 		figure(888,figsize = (22,10));
 		clf();
 		filename = splitdir(Temp)[2];
-		plotModel(fullMc,includeMeshInfo=true,M_regular = Minv,cutPad=pad,limits=[1.5,4.5],filename=filename,figTitle=filename);
+		plotModel(fullMc,includeMeshInfo=true,M_regular = Minv,cutPad=pad,limits=[2.5,6.0],filename=filename,figTitle=filename);
 	end
 end
 
@@ -219,7 +218,7 @@ cgit 	= 5;
 pInv = getInverseParam(Minv,modfun,regfun,alpha,mref[:],boundsLow,boundsHigh,
                          maxStep=maxStep,pcgMaxIter=cgit,pcgTol=pcgTol,
 						 minUpdate=1e-3, maxIter = maxit,HesPrec=HesPrec);
-dump(mref, 1, 0,  pInv, pMis, "mref.png")
+dump(mref, 1, 1,  pInv, pMis, "mref2.png")
 mc = copy(mref[:]);
 
 
@@ -299,10 +298,10 @@ windowSize = 4;
 updateMref = false;
 #####################################################################################################
 cyc = 0;startFrom = 1;endAtContDiv = length(contDiv)-3;
-mc,Z1,Z2,alpha1,alpha2, = freqContExtendedSourcesSS(mc,Z1,Z2,simSrcDim,15,Q,size(P,2),
+mc,Z1,Z2,alpha1,alpha2, = freqContExtendedSourcesSS(mc,Z1,Z2,simSrcDim,10,Q,size(P,2),
 				SourcesSubInd,pInv, pMis,contDiv, windowSize,resultsFilename,dump,Iact,sback,alpha1,alpha2,"",startFrom,endAtContDiv,cyc,GN,updateMref);
 saveCheckpoint(resultsFilename,mc,Z1,Z2,alpha1,alpha2,pInv,cyc);
-
+#=
 #####################################################################################################
 endAtContDiv = length(contDiv)-1
 #####################################################################################################
@@ -313,13 +312,17 @@ cyc = 1;startFrom = windowSize;
 mc,Z1,Z2,alpha1,alpha2, = freqContExtendedSourcesSS(mc,Z1,Z2,simSrcDim,15,Q,size(P,2),
 				SourcesSubInd, pInv, pMis,contDiv, windowSize,resultsFilename,dump,Iact,sback,alpha1,alpha2,"",startFrom,endAtContDiv,cyc,GN,updateMref);
 saveCheckpoint(resultsFilename,mc,Z1,Z2,alpha1,alpha2,pInv,cyc);
-
+=#
 #####################################################################################################
 
 updateMref = true;
 regfun(m,mref,M) = wdiffusionReg(m,mref,M,Iact=Iact,C=[]);
 pInv.regularizer = regfun;
 #####################################################################################################
+pInv.maxIter = 10;
+mc, = freqCont(mc, pInv, pMis,contDiv, 4,resultsFilename,dump,"",4,1,GN);
+mc, = freqCont(mc, pInv, pMis,contDiv, 4,resultsFilename,dump,"",4,2,GN);
+#=
 # mc,Z1,Z2,alpha1,alpha2,pInv.alpha,pInv.mref = loadCheckpoint(resultsFilename,cyc);
 
 cyc = 2;startFrom = windowSize;
@@ -337,7 +340,7 @@ mc,Z1,Z2,alpha1,alpha2, = freqContExtendedSourcesSS(mc,Z1,Z2,simSrcDim,10,Q,size
 				SourcesSubInd, pInv, pMis,contDiv, windowSize,resultsFilename,dump,Iact,sback,alpha1,alpha2,"",startFrom,endAtContDiv,cyc,GN,updateMref);
 saveCheckpoint(resultsFilename,mc,Z1,Z2,alpha1,alpha2,pInv,cyc);
 
-
+=#
 
 
 te = time_ns();

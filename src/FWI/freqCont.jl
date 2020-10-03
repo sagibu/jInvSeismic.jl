@@ -493,7 +493,7 @@ for freqIdx = startFrom:endAtContDiv
 		e1 = time_ns();
 		print("runtime of GN:"); println((e1 - t1)/1.0e9);
 
-		mc = map(x -> x > 4.2 ? 4.5 : x, mc)
+		mc = map(x -> x > 5.7 ? 6.0 : x, mc)
 
 		FafterGN = His.F[end];
 		println("Computed Misfit with new sources after GN : ",FafterGN);
