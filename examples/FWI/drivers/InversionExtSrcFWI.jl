@@ -11,7 +11,7 @@ using Statistics
 using jInv.InverseSolve
 using jInv.LinearSolvers
 
-NumWorkers = 10;
+NumWorkers = 4;
 if nworkers() == 1
 	addprocs(NumWorkers);
 elseif nworkers() < NumWorkers
@@ -74,7 +74,7 @@ modelDir 	= pwd();
 ########## uncomment block for overthrust slice ###############
 
 include(string(FWIDriversPath,"generateMrefOverthrust.jl"));
-omega = Array(3.0:0.8:10.0)*2*pi; #Marmousi
+omega = Array(3.0:0.8:9.0)*2*pi; #Marmousi
 
 alpha1 = 1e1;
 alpha2 = 1e1;
@@ -114,15 +114,11 @@ workersFWI = workers();
 println(string("The workers that we allocate for FWI are:",workersFWI));
 
 
-figure(14);
-imshow(m, clim = [2.5,6.0]);colorbar();
-figure(15);
-imshow(mref)
 figure(1,figsize = (22,10));
 plotModel(m,includeMeshInfo=true,M_regular = Minv,cutPad=pad,limits=[2.5,6.0],figTitle="orig",filename="orig.png");
 
-#figure(2,figsize = (22,10));
-#plotModel(mref,includeMeshInfo=true,M_regular = Minv,cutPad=pad,limits=[2.5,6.0],figTitle="mref",filename="mref.png");
+figure(2,figsize = (22,10));
+plotModel(mref,includeMeshInfo=true,M_regular = Minv,cutPad=pad,limits=[2.5,6.0],figTitle="mref",filename="mref2.png");
 
 prepareFWIDataFiles(m,Minv,mref,boundsHigh,boundsLow,dataFilenamePrefix,omega,ones(ComplexF64,size(omega)),
 									pad,ABLpad,jumpSrc,offset,workersFWI,maxBatchSize,Ainv,useFilesForFields);

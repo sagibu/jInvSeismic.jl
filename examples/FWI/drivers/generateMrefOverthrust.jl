@@ -39,23 +39,29 @@ Minv = getRegularMesh(domain,collect(size(m)));
 mPaddedNoSalt = copy(mPadded);
 mPaddedNoSalt[mPaddedNoSalt .> 5.5] .= 5.5;
 
-mrefPadded = smoothModel(mPaddedNoSalt,[],250);
-# mrefPadded = smooth3(mPaddedNoSalt,[],250);
+#mrefPadded = smoothModel(mPaddedNoSalt,[],250);
+#mrefPadded = smooth3(mPaddedNoSalt,[],250);
 sea_level = 1.5;
 sea = abs.(mPadded[:] .- 1.5) .< 1e-2;
-mrefPadded[sea] = mPadded[sea];
+#mrefPadded[sea] = mPadded[sea];
 
-mrefRowsNum = size(mrefPadded, 1)
-mrefPadded = repeat(mean(mrefPadded,dims=1), outer=(mrefRowsNum, 1))
+#mrefRowsNum = size(mrefPadded, 1)
+#mrefPadded = repeat(mean(mrefPadded,dims=1), outer=(mrefRowsNum, 1))
 
-# mrefRowsNumX = size(mrefPadded, 1)
-# mrefRowsNumY = size(mrefPadded, 2)
-# mrefPadded = repeat(mean(mrefPadded,dims=[1,2]), outer=(mrefRowsNumX, mrefRowsNumY, 1))
-# writedlm("examples/mrefOverthrust2D.dat", mrefPadded[1,:,:])
+#mrefRowsNumX = size(mrefPadded, 1)
+#mrefRowsNumY = size(mrefPadded, 2)
+#mrefPadded = repeat(mean(mrefPadded,dims=[1,2]), outer=(mrefRowsNumX, mrefRowsNumY, 1))
+
+#matwrite(string("examples/mrefOverthrust3D.mat"), Dict("VELs" => mrefPadded))
+
+file = matopen(string("examples/mrefOverthrust3D.mat")); DICT = read(file); close(file);
+mrefPadded = DICT["VELs"];
+
+### writedlm("examples/mrefOverthrust2D.dat", mrefPadded[1,:,:])
 # figure(16);
 # imshow(mrefPadded[1,:,:])
 
-mrefPadded = readdlm("examples/mrefOverthrust2D.dat")
+#mrefPadded = readdlm("examples/mrefOverthrust2D.dat")
 
 N = prod(MinvPadded.n);
 boundsLow  = minimum(mPadded);
@@ -72,18 +78,18 @@ end
 
 
 
-dim     = 2;
+dim     = 3;
 pad     = 30;
-jumpSrc    = 5;
+jumpSrc    = 10;
 offset  = 1000;
-# domain = [0.0,10.0,0.0,10.0,0.0,4.65]; # without the pad for Marmousi 1
-domain = [0.0,10.0,0.0,4.65]; # without the pad for Marmousi 1
+domain = [0.0,10.0,0.0,10.0,0.0,4.65]; # without the pad for Marmousi 1
+#domain = [0.0,10.0,0.0,4.65]; # without the pad for Marmousi 1
 # domain = [0.0,20.0,0.0,4.0]; # without the pad for Marmousi 2
-newSize = [400,187];
+#newSize = [400,187];
 newSize = [];
 modelDir = pwd();
 
-# (m,Minv,mref,boundsHigh,boundsLow) = readModelAndGenerateMeshMrefMarmousi(modelDir,"examples/overthrust3D_small.mat",dim,pad,domain,newSize,1.25,4.0); # for marmousi1
+(m,Minv,mref,boundsHigh,boundsLow) = readModelAndGenerateMeshMrefMarmousi(modelDir,"examples/overthrust3D_small.mat",dim,pad,domain,newSize,1.25,4.0); # for marmousi1
 
-(m,Minv,mref,boundsHigh,boundsLow) = readModelAndGenerateMeshMrefMarmousi(modelDir,"examples/overthrust_XZ_slice.dat",dim,pad,domain,newSize,1.25,4.0); # for marmousi1
+#(m,Minv,mref,boundsHigh,boundsLow) = readModelAndGenerateMeshMrefMarmousi(modelDir,"examples/overthrust_XZ_slice.dat",dim,pad,domain,newSize,1.25,4.0); # for marmousi1
 #(m,Minv,mref,boundsHigh,boundsLow) = readModelAndGenerateMeshMrefMarmousi(modelDir,"examples/Marmousi2Vp.dat",dim,pad,domain,newSize,1.25,4.0); # for marmousi2

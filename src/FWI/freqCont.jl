@@ -92,7 +92,7 @@ end
 
 function calculateZ2(misfitCalc::Function, p::Integer, nsrc::Integer, nfreq::Integer,
 	nrec::Integer, nwork::Integer,
-	numOfCurrentProblems::Integer, mergedWd::Array, mergedRc::Array, HinvPs::Array,
+	numOfCurrentProblems::Integer, mergedWd::Array, mergedRc::Array, pMis::Array,
 	pMisCurrent::Array{MisfitParam}, currentSrcInd::Array, Z1::Matrix, alpha::Float64)
 
 	#|| Hz - D||^2 -> Z = (H^TH)^{-1}H^TD
@@ -100,10 +100,15 @@ function calculateZ2(misfitCalc::Function, p::Integer, nsrc::Integer, nfreq::Int
 	## HERE WE  NEED TO MAKE SURE THAT Wd is equal in its real and imaginary parts.
 	rhs = zeros(ComplexF64, (p, nsrc));
 	lhs = zeros(ComplexF64, (p,p));
+	
+	HinvPsZ1 = computeHinvTRecX(pMis, Z1, 0);
+	
 	for i = 1:nfreq
 		meanWd = mean(mergedWd[i])
-		lhs .+= (real(meanWd).^2) .* Z1' * HinvPs[i] * HinvPs[i]' * Z1;
-		rhs .+= (real(meanWd).^2) .* Z1' * HinvPs[i] * (mergedRc[i]);
+		#lhs .+= (real(meanWd).^2) .* Z1' * HinvPs[i] * HinvPs[i]' * Z1;
+		lhs .+= (real(meanWd).^2) .* HinvPsZ1[i]' * HinvPsZ1[i];
+		#rhs .+= (real(meanWd).^2) .* Z1' * HinvPs[i] * (mergedRc[i]);
+		rhs .+= (real(meanWd).^2) .* HinvPsZ1[i]' * (mergedRc[i]);
 	end
 	lhs += alpha * I;
 
@@ -162,7 +167,7 @@ function misfitCalc2(Z1,Z2,mergedWd,mergedRc,nfreq,alpha1,alpha2,pMis)
 	sum = 0.0;
 	HinvPs = computeHinvTRecX(pMis, Z1, 0);
 	for i = 1:nfreq
-		res, = SSDFun((HinvPs[i]' * Z1) * Z2,mergedRc[i],mean(mergedWd[i]) .* ones(size(mergedRc[i])));
+		res, = SSDFun(HinvPs[i] * Z2,mergedRc[i],mean(mergedWd[i]) .* ones(size(mergedRc[i])));
 		# res, = SSDFun((HinvPs[i]' * Z1) * Z2,mergedRc[i],mean(mergedWd[i]) .* ones(size(mergedRc[i])));
 		sum += res;
 	end
@@ -186,7 +191,7 @@ function MultOpT(HPinv, R, Z2)
 	return HPinv * (R * Z2')
 end
 
-function MultAll(avgWds, HPinvs, R, Z1, Z2, alpha, stepReg)
+function MultAll(avgWds, pMis, R, Z1, Z2, alpha, stepReg)
 	sum = zeros(ComplexF64, size(R))
 
 	# partials = Array{Array{ComplexF64}}(undef,length(avgWds))
@@ -203,9 +208,16 @@ function MultAll(avgWds, HPinvs, R, Z1, Z2, alpha, stepReg)
 	# end
 	#
 	# overallSum = sum(partials)
-
+	
+	inner = computeHinvTRecX(pMis, R, 0);
+	inner = map(x -> x * (Z2 * Z2'), inner);
 	for i = 1:length(avgWds)
-		sum += MultOpT(HPinvs[i], (avgWds[i]^2) .* MultOp(HPinvs[i], R, Z2), Z2)
+		inner[i] = avgWds[i]^2 .* inner[i] * (Z2 * Z2');
+	end
+	outer = computeHinvTRecXarr(pMis, inner, 1);
+	for i = 1:length(avgWds)
+		#sum += MultOpT(HPinvs[i], (avgWds[i]^2) .* MultOp(HPinvs[i], R, Z2), Z2)
+		sum += outer[i]
 	end
 	# eps = 1e-2
 	# return sum + (alpha./(abs.(Z1) .+ eps * maximum(abs.(Z1)))).*R + stepReg*R;
@@ -213,15 +225,17 @@ function MultAll(avgWds, HPinvs, R, Z1, Z2, alpha, stepReg)
 	return sum + (alpha + stepReg)*R;
 end
 
-function calculateZ1(misfitCalc::Function, nfreq::Integer, mergedWd::Array, mergedRc::Array, HinvPs::Array, Z1::Matrix,Z2::Matrix, alpha1::Float64,stepReg::Float64)
+function calculateZ1(misfitCalc::Function, nfreq::Integer, mergedWd::Array, mergedRc::Array, pMis::Array, Z1::Matrix,Z2::Matrix, alpha1::Float64,stepReg::Float64)
 	## HERE WE  NEED TO MAKE SURE THAT Wd is equal in its real and imaginary parts.
 	rhs = zeros(ComplexF64, size(Z1));
+	rhsElement = computeHinvTRecXarr(pMis, mergedRc, 1);
 	for i = 1:nfreq
-		rhs .+= (real(mean(mergedWd[i])).^2) .*  MultOpT(HinvPs[i], mergedRc[i], Z2);
+		#rhs .+= (real(mean(mergedWd[i])).^2) .*  MultOpT(HinvPs[i], mergedRc[i], Z2);
+		rhs .+= (real(mean(mergedWd[i])).^2) .*  (rhsElement[i] * Z2);
 	end
 	rhs .+= (stepReg) .* Z1
 
-	OP = x-> MultAll(mean.(real.(mergedWd)), HinvPs, x, Z1, Z2, alpha1, stepReg);
+	OP = x-> MultAll(mean.(real.(mergedWd)), pMis, x, Z1, Z2, alpha1, stepReg);
 	eps = 1e-2
 	#M = zeros((size(Z1,1), 1))
 	#for i=1:size(M,1)
@@ -338,10 +352,10 @@ for freqIdx = startFrom:endAtContDiv
 
 
 		pMisHps = pMisTemp[1:nwork:numOfCurrentProblems]
-		t1 = time_ns();
-		HinvPs = computeHinvTRec(pMisTemp[1:nwork:numOfCurrentProblems]);
-		e1 = time_ns();
-		print("runtime of HINVPs: "); println((e1 - t1)/1.0e9);
+		#t1 = time_ns();
+		#HinvPs = computeHinvTRec(pMisTemp[1:nwork:numOfCurrentProblems]);
+		#e1 = time_ns();
+		#print("runtime of HINVPs: "); println((e1 - t1)/1.0e9);
 
 		if simSrcDim==1
 			TEmat = Matrix(1.0I,nsrc,nsrc)
@@ -370,7 +384,7 @@ for freqIdx = startFrom:endAtContDiv
 
 		t1 = time_ns();
 		srcNum = simSrcDim == 1 ? nsrc : simSrcDim;
-		Z2 = calculateZ2(misfitCalc2, p, srcNum, nfreq, nrcv,nwork, numOfCurrentProblems, mergedWd ./ sqrt(simSrcDim), mergedRcReduced, HinvPs, pMisTempFetched, currentSrcInd, Z1, alpha2);
+		Z2 = calculateZ2(misfitCalc2, p, srcNum, nfreq, nrcv,nwork, numOfCurrentProblems, mergedWd ./ sqrt(simSrcDim), mergedRcReduced, pMisHps, pMisTempFetched, currentSrcInd, Z1, alpha2);
 		e1 = time_ns();
 		# print("runtime of calculateZ2: "); println((e1 - t1)/1.0e9);
 
@@ -386,7 +400,7 @@ for freqIdx = startFrom:endAtContDiv
 			#### COMPUTING Z1:
 			###################################################
 			t1 = time_ns();
-			Z1 = calculateZ1(misfitCalc2, nfreq, mergedWd ./ sqrt(simSrcDim), mergedRcReduced, HinvPs, Z1, Z2, alpha1, stepReg);
+			Z1 = calculateZ1(misfitCalc2, nfreq, mergedWd ./ sqrt(simSrcDim), mergedRcReduced, pMisHps, Z1, Z2, alpha1, stepReg);
 			e1 = time_ns();
 			# print("runtime of calculateZ1: "); println((e1 - t1)/1.0e9);
 			mis = misfitCalc2(Z1,Z2,mergedWd ./ sqrt(simSrcDim) ,mergedRcReduced,nfreq,alpha1,alpha2, pMisHps);
@@ -397,7 +411,7 @@ for freqIdx = startFrom:endAtContDiv
 			#### COMPUTING Z2:
 			###################################################
 			t1 = time_ns();
-			Z2 = calculateZ2(misfitCalc2, p, srcNum, nfreq, nrcv,nwork, numOfCurrentProblems, mergedWd ./ sqrt(simSrcDim), mergedRcReduced, HinvPs, pMisTempFetched, currentSrcInd, Z1, alpha2);
+			Z2 = calculateZ2(misfitCalc2, p, srcNum, nfreq, nrcv,nwork, numOfCurrentProblems, mergedWd ./ sqrt(simSrcDim), mergedRcReduced, pMisHps, pMisTempFetched, currentSrcInd, Z1, alpha2);
 			e1 = time_ns();
 			mis = misfitCalc2(Z1,Z2,mergedWd ./ sqrt(simSrcDim) ,mergedRcReduced,nfreq,alpha1,alpha2, pMisHps);
 			obj = objectiveCalc2(Z1,Z2,mis,alpha1,alpha2);

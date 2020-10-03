@@ -11,7 +11,7 @@ function prepareFWIDataFiles(m,Minv::RegularMesh,mref,boundsHigh,boundsLow,
 RCVfile = string(filenamePrefix,"_rcvMap.dat");
 SRCfile = string(filenamePrefix,"_srcMap.dat");
 writeSrcRcvLocFile(SRCfile,Minv,ABLpad,jump);
-writeSrcRcvLocFile(RCVfile,Minv,ABLpad,1);
+writeSrcRcvLocFile(RCVfile,Minv,ABLpad,2);
 
 dataFullFilenamePrefix = string(filenamePrefix,"_freq");
 gamma = prepareFWIDataFiles2(m, Minv, filenamePrefix,dataFullFilenamePrefix,omega,waveCoef,pad,ABLpad,offset,workerList,maxBatchSize,Ainv,useFilesForFields);
