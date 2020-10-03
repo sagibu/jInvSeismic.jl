@@ -157,11 +157,13 @@ end
 
 
 
-function misfitCalc2(Z1,Z2,mergedWd,mergedRc,nfreq,alpha1,alpha2,HinvPs)
+function misfitCalc2(Z1,Z2,mergedWd,mergedRc,nfreq,alpha1,alpha2,pMis)
 	## HERE WE  NEED TO MAKE SURE THAT Wd is equal in its real and imaginary parts.
 	sum = 0.0;
+	HinvPs = computeHinvTRecX()
 	for i = 1:nfreq
 		res, = SSDFun((HinvPs[i]' * Z1) * Z2,mergedRc[i],mean(mergedWd[i]) .* ones(size(mergedRc[i])));
+		# res, = SSDFun((HinvPs[i]' * Z1) * Z2,mergedRc[i],mean(mergedWd[i]) .* ones(size(mergedRc[i])));
 		sum += res;
 	end
 	return sum;
@@ -334,6 +336,8 @@ for freqIdx = startFrom:endAtContDiv
 
 		mc_prev = convert(Array{Float16},mc);
 
+
+		pMisHps = pMisTemp[1:nwork:numOfCurrentProblems]
 		t1 = time_ns();
 		HinvPs = computeHinvTRec(pMisTemp[1:nwork:numOfCurrentProblems]);
 		e1 = time_ns();
@@ -354,7 +358,7 @@ for freqIdx = startFrom:endAtContDiv
 		end
 
 		# iterations of alternating minimization between Z1 and Z2
-		println("Misfit with Zero Z2 (our computation): ", misfitCalc2(zeros(ComplexF64, (N_nodes, p)),zeros(ComplexF64, (p, nsrc)),mergedWd,mergedRc,nfreq,alpha1,alpha2, HinvPs))
+		println("Misfit with Zero Z2 (our computation): ", misfitCalc2(zeros(ComplexF64, (N_nodes, p)),zeros(ComplexF64, (p, nsrc)),mergedWd,mergedRc,nfreq,alpha1,alpha2, pMisHps))
 		mergedRcReduced = map(x-> x*TEmat, mergedRc)
 
 		pMisTempFetched = map(fetch, pMisTemp)
@@ -371,7 +375,7 @@ for freqIdx = startFrom:endAtContDiv
 		# print("runtime of calculateZ2: "); println((e1 - t1)/1.0e9);
 
 		print("After First Z2 update: ");
-		mis = misfitCalc2(Z1,Z2,mergedWd ./ sqrt(simSrcDim),mergedRcReduced,nfreq,alpha1,alpha2, HinvPs);
+		mis = misfitCalc2(Z1,Z2,mergedWd ./ sqrt(simSrcDim),mergedRcReduced,nfreq,alpha1,alpha2, pMisHps);
 		obj = objectiveCalc2(Z1,Z2,mis,alpha1,alpha2);
 		initialMis = mis
 		initialObj = obj
@@ -385,7 +389,7 @@ for freqIdx = startFrom:endAtContDiv
 			Z1 = calculateZ1(misfitCalc2, nfreq, mergedWd ./ sqrt(simSrcDim), mergedRcReduced, HinvPs, Z1, Z2, alpha1, stepReg);
 			e1 = time_ns();
 			# print("runtime of calculateZ1: "); println((e1 - t1)/1.0e9);
-			mis = misfitCalc2(Z1,Z2,mergedWd ./ sqrt(simSrcDim) ,mergedRcReduced,nfreq,alpha1,alpha2, HinvPs);
+			mis = misfitCalc2(Z1,Z2,mergedWd ./ sqrt(simSrcDim) ,mergedRcReduced,nfreq,alpha1,alpha2, pMisHps);
 			obj = objectiveCalc2(Z1,Z2,mis,alpha1,alpha2);
 			println("After Z1: mis: ",mis,", obj: ",obj,", norm Z2 = ", norm(Z2)^2," norm Z1: ", norm(Z1)^2, ", [Time: ",(e1 - t1)/1.0e9," sec]")
 
@@ -395,7 +399,7 @@ for freqIdx = startFrom:endAtContDiv
 			t1 = time_ns();
 			Z2 = calculateZ2(misfitCalc2, p, srcNum, nfreq, nrcv,nwork, numOfCurrentProblems, mergedWd ./ sqrt(simSrcDim), mergedRcReduced, HinvPs, pMisTempFetched, currentSrcInd, Z1, alpha2);
 			e1 = time_ns();
-			mis = misfitCalc2(Z1,Z2,mergedWd ./ sqrt(simSrcDim) ,mergedRcReduced,nfreq,alpha1,alpha2, HinvPs);
+			mis = misfitCalc2(Z1,Z2,mergedWd ./ sqrt(simSrcDim) ,mergedRcReduced,nfreq,alpha1,alpha2, pMisHps);
 			obj = objectiveCalc2(Z1,Z2,mis,alpha1,alpha2);
 			println("After Z2: mis: ",mis,", obj: ",obj,", norm Z2 = ", norm(Z2)^2," norm Z1: ", norm(Z1)^2, ", [Time: ",(e1 - t1)/1.0e9," sec]")
 			if mis < 0.3 * initialMis
@@ -422,7 +426,7 @@ for freqIdx = startFrom:endAtContDiv
                 #alpha1 = alpha1*2;
                 #println("Ratio mis/F_zero is: ",mis/F_zero,", hence increasing alpha1 by 2: ",alpha1,",",alpha2);
 		#end
-		
+
 		# get Dobs*TEmat
 		dobsTE = map(x-> x * TEmat, mergedDobs);
 
@@ -622,7 +626,7 @@ for freqIdx = startFrom:(length(contDiv)-1)
 		println("At Start: mis: ",mis,", obj: ",obj,", norm Z2 = ", norm(Z2)^2," norm Z1: ", norm(Z1)^2)
 		pMisTempFetched = map(fetch, pMisTemp)
 		prevObj = 0
-		
+
 		# Z2 = calculateZ2(misfitCalc2, p, nsrc, nfreq, nrcv,nwork, numOfCurrentProblems, mergedWd, mergedRc, HinvPs, pMisTempFetched, currentSrcInd, Z1, alpha2);
 		#
 		# print("After Z2:");
