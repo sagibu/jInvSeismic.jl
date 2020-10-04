@@ -4,14 +4,14 @@ using FFTW
 
 function prepareFWIDataFiles(m,Minv::RegularMesh,mref,boundsHigh,boundsLow,
 							filenamePrefix::String,omega::Array{Float64,1},waveCoef::Array{ComplexF64,1},
-							pad::Int64,ABLpad::Int64,jump::Int64,offset::Int64=prod(Minv.n+1),workerList = workers(),
+							pad::Int64,ABLpad::Int64,jumpSrc::Int64,jumpRcv::Int64,offset::Int64=prod(Minv.n+1),workerList = workers(),
 							maxBatchSize::Int64=48, Ainv::AbstractSolver = getMUMPSsolver([],0,0,2),useFilesForFields::Bool = false,calcTravelTime::Bool=false)
 
 ########################## m is in Velocity here. ###################################
 RCVfile = string(filenamePrefix,"_rcvMap.dat");
 SRCfile = string(filenamePrefix,"_srcMap.dat");
-writeSrcRcvLocFile(SRCfile,Minv,ABLpad,jump);
-writeSrcRcvLocFile(RCVfile,Minv,ABLpad,2);
+writeSrcRcvLocFile(SRCfile,Minv,ABLpad,jumpSrc);
+writeSrcRcvLocFile(RCVfile,Minv,ABLpad,jumpRcv);
 
 dataFullFilenamePrefix = string(filenamePrefix,"_freq");
 gamma = prepareFWIDataFiles2(m, Minv, filenamePrefix,dataFullFilenamePrefix,omega,waveCoef,pad,ABLpad,offset,workerList,maxBatchSize,Ainv,useFilesForFields);

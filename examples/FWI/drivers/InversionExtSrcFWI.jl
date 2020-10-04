@@ -11,12 +11,12 @@ using Statistics
 using jInv.InverseSolve
 using jInv.LinearSolvers
 
-NumWorkers = 4;
-if nworkers() == 1
-	addprocs(NumWorkers);
-elseif nworkers() < NumWorkers
- 	addprocs(NumWorkers - nworkers());
-end
+# NumWorkers = 4;
+# if nworkers() == 1
+# 	addprocs(NumWorkers);
+# elseif nworkers() < NumWorkers
+#  	addprocs(NumWorkers - nworkers());
+# end
 
 @everywhere begin
 	using jInv.InverseSolve
@@ -54,6 +54,7 @@ modelDir 	= pwd();
 # dim     = 2;
 # pad     = 30;
 # jumpSrc = 5;
+# jumpRcv = 1;
 # newSize = [600,300];
 #
 # # (m,Minv,mref,boundsHigh,boundsLow) = readModelAndGenerateMeshMref(modelDir,"../../SEGmodel2Dsalt.dat",dim,pad,[0.0,13.5,0.0,4.2],newSize,1.752,2.9);
@@ -94,7 +95,7 @@ alpha2 = 1e1;
 
 #######################################################
 
-maxBatchSize = 256;
+maxBatchSize = 32;
 useFilesForFields = false;
 
 # ###################################################################################################################
@@ -108,7 +109,7 @@ resultsFilename = string(resultsFilename,".dat");
 println("omega*maximum(h): ",omega*maximum(Minv.h)*sqrt(maximum(1.0./(boundsLow.^2))));
 ABLpad = pad + 4;
 
-Ainv  = getParallelJuliaSolver(ComplexF64,Int64,numCores=4,backend=3);
+Ainv  = getParallelJuliaSolver(ComplexF32,UInt32,numCores=16,backend=3);
 
 workersFWI = workers();
 println(string("The workers that we allocate for FWI are:",workersFWI));
@@ -121,7 +122,7 @@ figure(2,figsize = (22,10));
 plotModel(mref,includeMeshInfo=true,M_regular = Minv,cutPad=pad,limits=[2.5,6.0],figTitle="mref",filename="mref2.png");
 
 prepareFWIDataFiles(m,Minv,mref,boundsHigh,boundsLow,dataFilenamePrefix,omega,ones(ComplexF64,size(omega)),
-									pad,ABLpad,jumpSrc,offset,workersFWI,maxBatchSize,Ainv,useFilesForFields);
+									pad,ABLpad,jumpSrc,jumpRcv,offset,workersFWI,maxBatchSize,Ainv,useFilesForFields);
 
 
 

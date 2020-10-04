@@ -40,19 +40,19 @@ mPaddedNoSalt = copy(mPadded);
 mPaddedNoSalt[mPaddedNoSalt .> 5.5] .= 5.5;
 
 #mrefPadded = smoothModel(mPaddedNoSalt,[],250);
-#mrefPadded = smooth3(mPaddedNoSalt,[],250);
+# mrefPadded = smooth3(mPaddedNoSalt,Minv,250);
 sea_level = 1.5;
 sea = abs.(mPadded[:] .- 1.5) .< 1e-2;
-#mrefPadded[sea] = mPadded[sea];
+# mrefPadded[sea] = mPadded[sea];
 
 #mrefRowsNum = size(mrefPadded, 1)
 #mrefPadded = repeat(mean(mrefPadded,dims=1), outer=(mrefRowsNum, 1))
 
-#mrefRowsNumX = size(mrefPadded, 1)
-#mrefRowsNumY = size(mrefPadded, 2)
-#mrefPadded = repeat(mean(mrefPadded,dims=[1,2]), outer=(mrefRowsNumX, mrefRowsNumY, 1))
-
-#matwrite(string("examples/mrefOverthrust3D.mat"), Dict("VELs" => mrefPadded))
+# mrefRowsNumX = size(mrefPadded, 1)
+# mrefRowsNumY = size(mrefPadded, 2)
+# mrefPadded = repeat(mean(mrefPadded,dims=[1,2]), outer=(mrefRowsNumX, mrefRowsNumY, 1))
+#
+# matwrite(string("examples/mrefOverthrust3D.mat"), Dict("VELs" => mrefPadded))
 
 file = matopen(string("examples/mrefOverthrust3D.mat")); DICT = read(file); close(file);
 mrefPadded = DICT["VELs"];
@@ -79,10 +79,11 @@ end
 
 
 dim     = 3;
-pad     = 30;
-jumpSrc    = 10;
+pad     = 20;
+jumpSrc    = 17;
+jumpRcv = 4;
 offset  = 1000;
-domain = [0.0,10.0,0.0,10.0,0.0,4.65]; # without the pad for Marmousi 1
+domain = [0.0,7.5,0.0,7.5,0.0,4.65]; # without the pad for Marmousi 1
 #domain = [0.0,10.0,0.0,4.65]; # without the pad for Marmousi 1
 # domain = [0.0,20.0,0.0,4.0]; # without the pad for Marmousi 2
 #newSize = [400,187];
