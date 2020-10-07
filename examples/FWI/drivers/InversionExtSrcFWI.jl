@@ -10,6 +10,7 @@ using Helmholtz
 using Statistics
 using jInv.InverseSolve
 using jInv.LinearSolvers
+using Multigrid
 
 # NumWorkers = 4;
 # if nworkers() == 1
@@ -75,7 +76,7 @@ modelDir 	= pwd();
 ########## uncomment block for overthrust slice ###############
 
 include(string(FWIDriversPath,"generateMrefOverthrust.jl"));
-omega = Array(3.0:0.8:9.0)*2*pi; #Marmousi
+omega = Array(2.5:0.5:5.0)*2*pi; #Marmousi
 
 alpha1 = 1e1;
 alpha2 = 1e1;
@@ -95,7 +96,7 @@ alpha2 = 1e1;
 
 #######################################################
 
-maxBatchSize = 32;
+maxBatchSize = 24;
 useFilesForFields = false;
 
 # ###################################################################################################################
@@ -109,7 +110,23 @@ resultsFilename = string(resultsFilename,".dat");
 println("omega*maximum(h): ",omega*maximum(Minv.h)*sqrt(maximum(1.0./(boundsLow.^2))));
 ABLpad = pad + 4;
 
-Ainv  = getParallelJuliaSolver(ComplexF32,UInt32,numCores=16,backend=3);
+levels      = 3;
+numCores 	= 16;
+BLAS.set_num_threads(numCores);
+maxIter     = 30;
+relativeTol = 1e-6;
+relaxType   = "Jac";
+relaxParam  = 0.75;
+relaxPre 	= 2;
+relaxPost   = 2;
+cycleType   ='W';
+coarseSolveType = "Julia";
+MG = getMGparam(ComplexF64,Int64,levels,numCores,maxIter,relativeTol,relaxType,relaxParam,relaxPre,relaxPost,cycleType,coarseSolveType,0.0,0.0);
+shift = 0.2;
+Hparam = HelmholtzParam(Minv,zeros(0),zeros(0),0.0,true,true);
+Ainv = getShiftedLaplacianMultigridSolver(Hparam, MG,shift,"BiCGSTAB",0,true);
+
+# Ainv  = getParallelJuliaSolver(ComplexF32,UInt32,numCores=16,backend=3);
 
 workersFWI = workers();
 println(string("The workers that we allocate for FWI are:",workersFWI));
@@ -199,6 +216,7 @@ flush(Base.stdout)
 
 GN = "projGN"
 maxStep=0.05*maximum(boundsHigh);
+regparams = [1.0,1.0,1.0,1e-6];
 # regfun(m,mref,M) 	= wdiffusionReg(m,mref,M,Iact=Iact,C=[]);
 regfun(m,mref,M) 	= wFourthOrderSmoothing(m,mref,M,Iact=Iact,C=[]);
 if dim==2
