@@ -76,7 +76,7 @@ modelDir 	= pwd();
 ########## uncomment block for overthrust slice ###############
 
 include(string(FWIDriversPath,"generateMrefOverthrust.jl"));
-omega = Array(2.5:0.5:5.0)*2*pi; #Marmousi
+omega = [2.5,3.0,3.5,4.0,5.0]*2*pi; #Marmousi
 
 alpha1 = 1e1;
 alpha2 = 1e1;
