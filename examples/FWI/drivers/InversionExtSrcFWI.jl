@@ -138,8 +138,8 @@ plotModel(m,includeMeshInfo=true,M_regular = Minv,cutPad=pad,limits=[2.5,6.0],fi
 figure(2,figsize = (22,10));
 plotModel(mref,includeMeshInfo=true,M_regular = Minv,cutPad=pad,limits=[2.5,6.0],figTitle="mref",filename="mref2.png");
 
-prepareFWIDataFiles(m,Minv,mref,boundsHigh,boundsLow,dataFilenamePrefix,omega,ones(ComplexF64,size(omega)),
-									pad,ABLpad,jumpSrc,jumpRcv,offset,workersFWI,maxBatchSize,Ainv,useFilesForFields);
+# prepareFWIDataFiles(m,Minv,mref,boundsHigh,boundsLow,dataFilenamePrefix,omega,ones(ComplexF64,size(omega)),
+# 									pad,ABLpad,jumpSrc,jumpRcv,offset,workersFWI,maxBatchSize,Ainv,useFilesForFields);
 
 
 
@@ -335,8 +335,8 @@ regfun(m,mref,M) = wdiffusionReg(m,mref,M,Iact=Iact,C=[]);
 pInv.regularizer = regfun;
 #####################################################################################################
 pInv.maxIter = 10;
-mc, = freqCont(mc, pInv, pMis,contDiv, 4,resultsFilename,dump,"",4,1,GN);
-mc, = freqCont(mc, pInv, pMis,contDiv, 4,resultsFilename,dump,"",4,2,GN);
+mc, = freqCont(mc, Q, size(P,2), simSrcDim,SourcesSubInd, pInv, pMis,contDiv, 4,resultsFilename,dump,"",4,1,GN);
+mc, = freqCont(mc, Q, size(P,2), simSrcDim,SourcesSubInd, pInv, pMis,contDiv, 4,resultsFilename,dump,"",4,2,GN);
 #=
 # mc,Z1,Z2,alpha1,alpha2,pInv.alpha,pInv.mref = loadCheckpoint(resultsFilename,cyc);
 

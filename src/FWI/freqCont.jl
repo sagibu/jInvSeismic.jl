@@ -24,7 +24,7 @@ using Multigrid.ParallelJuliaSolver
 		method      - "projGN" or "barrierGN"
 
 """
-function freqCont(mc, pInv::InverseParam, pMis::Array{RemoteChannel},contDiv::Array{Int64}, windowSize::Int64,
+function freqCont(mc, originalSources, nrcv, simSrcDim, sourcesSubInd, pInv::InverseParam, pMis::Array{RemoteChannel},contDiv::Array{Int64}, windowSize::Int64,
 			resultsFilename::String,dumpFun::Function,mode::String="",startFrom::Int64 = 1,cycle::Int64=0,method::String="projGN")
 Dc = 0;
 flag = -1;
@@ -43,11 +43,50 @@ for freqIdx = startFrom:(length(contDiv)-1)
 		end
 		reqIdx2 = freqIdx;
 	end
+
 	currentProblems = contDiv[reqIdx1]:contDiv[reqIdx2+1]-1;
 	println("\n======= New Continuation Stage: selecting continuation batches: ",reqIdx1," to ",reqIdx2,"=======\n");
 	pMisTemp = pMis[currentProblems];
+	numOfCurrentProblems = length(pMisTemp);
+	currentSrcInd = sourcesSubInd[currentProblems]
 	pInv.mref = mc[:];
+	nwork = nworkers()
 
+	nsrc = size(originalSources,2);
+	nfreq = div(length(pMisTemp),nwork);
+
+	mergedDobs, mergedWd = getMergedData(pMisTemp, nfreq, nsrc, nrcv, nwork, currentSrcInd)
+	OrininalSourcesDivided = Array{SparseMatrixCSC}(undef,length(currentSrcInd));
+	for k=1:length(currentSrcInd)
+		OrininalSourcesDivided[k] = originalSources[:,currentSrcInd[k]];
+	end
+
+	# new sources split indexes
+
+	if simSrcDim == 1
+		newSrcInd = currentSrcInd
+	else
+		newSrcInd = [Int[] for i=1:length(currentSrcInd)]
+		for k=1:simSrcDim
+			for i=1:nfreq
+						append!(newSrcInd[(k % nwork) + 1 + (i-1)*nwork], k)
+			end
+		end
+	end
+
+	if simSrcDim==1
+		TEmat = Matrix(1.0I,nsrc,nsrc)
+	else
+		TEmat = rand([-1,1],(nsrc,simSrcDim));
+	end
+
+	reducedSourcesDivided = getSourcesDivided(originalSources * TEmat, newSrcInd)
+	reducedDobsDivided, reducedWdDivided = getReducedDataDivided(mergedDobs, mergedWd, simSrcDim,
+																TEmat, nwork, newSrcInd)
+
+	pMisTemp = setSources(pMisTemp,reducedSourcesDivided);
+	pMisTemp = setDobs(pMisTemp,reducedDobsDivided)
+	pMisTemp = setWd(pMisTemp,reducedWdDivided)
 
 	if resultsFilename == ""
 		filename = "";
@@ -84,13 +123,25 @@ for freqIdx = startFrom:(length(contDiv)-1)
 	His.Dc = []
 	push!(HIS,His)
 
+	origWdDivided = Array{Array{ComplexF64}}(undef,nwork * length(mergedWd));
+	origDobsDivided = Array{Array{ComplexF64}}(undef,nwork * length(mergedDobs));
+
+	for k=1:length(origDobsDivided)
+			origDobsDivided[k] = mergedDobs[trunc(Integer, (k-1) / nwork) + 1][:,currentSrcInd[k]];
+			origWdDivided[k] = mergedWd[trunc(Integer, (k-1) / nwork) + 1][:,currentSrcInd[k]];
+	end
+
+	pMisTemp = setSources(pMisTemp,OrininalSourcesDivided);
+	pMisTemp = setDobs(pMisTemp,origDobsDivided)
+	pMisTemp = setWd(pMisTemp,origWdDivided)
+
 	clear!(pMisTemp);
 end
 return mc,Dc,flag,HIS;
 end
 
 
-function calculateZ2(misfitCalc::Function, p::Integer, nsrc::Integer, nfreq::Integer,
+function calculateZ2(m,misfitCalc::Function, p::Integer, nsrc::Integer, nfreq::Integer,
 	nrec::Integer, nwork::Integer,
 	numOfCurrentProblems::Integer, mergedWd::Array, mergedRc::Array, pMis::Array,
 	pMisCurrent::Array{MisfitParam}, currentSrcInd::Array, Z1::Matrix, alpha::Float64)
@@ -100,9 +151,9 @@ function calculateZ2(misfitCalc::Function, p::Integer, nsrc::Integer, nfreq::Int
 	## HERE WE  NEED TO MAKE SURE THAT Wd is equal in its real and imaginary parts.
 	rhs = zeros(ComplexF64, (p, nsrc));
 	lhs = zeros(ComplexF64, (p,p));
-	
-	HinvPsZ1 = computeHinvTRecX(pMis, Z1, 0);
-	
+
+	HinvPsZ1 = computeHinvTRecX(pMis, Z1, m, 0);
+
 	for i = 1:nfreq
 		meanWd = mean(mergedWd[i])
 		#lhs .+= (real(meanWd).^2) .* Z1' * HinvPs[i] * HinvPs[i]' * Z1;
@@ -162,11 +213,13 @@ end
 
 
 
-function misfitCalc2(Z1,Z2,mergedWd,mergedRc,nfreq,alpha1,alpha2,pMis)
+function misfitCalc2(m, Z1,Z2,mergedWd,mergedRc,nfreq,alpha1,alpha2,pMis)
 	## HERE WE  NEED TO MAKE SURE THAT Wd is equal in its real and imaginary parts.
 	sum = 0.0;
-	HinvPs = computeHinvTRecX(pMis, Z1, 0);
+	HinvPs = computeHinvTRecX(pMis, Z1, m, 0);
 	for i = 1:nfreq
+		println("size mergedRc: ", size(mergedRc[i]))
+		println("size HinvPZ2: ", size(HinvPs[i] * Z2))
 		res, = SSDFun(HinvPs[i] * Z2,mergedRc[i],mean(mergedWd[i]) .* ones(size(mergedRc[i])));
 		# res, = SSDFun((HinvPs[i]' * Z1) * Z2,mergedRc[i],mean(mergedWd[i]) .* ones(size(mergedRc[i])));
 		sum += res;
@@ -191,7 +244,7 @@ function MultOpT(HPinv, R, Z2)
 	return HPinv * (R * Z2')
 end
 
-function MultAll(avgWds, pMis, R, Z1, Z2, alpha, stepReg)
+function MultAll(m, avgWds, pMis, R, Z1, Z2, alpha, stepReg)
 	sum = zeros(ComplexF64, size(R))
 
 	# partials = Array{Array{ComplexF64}}(undef,length(avgWds))
@@ -208,13 +261,13 @@ function MultAll(avgWds, pMis, R, Z1, Z2, alpha, stepReg)
 	# end
 	#
 	# overallSum = sum(partials)
-	
-	inner = computeHinvTRecX(pMis, R, 0);
-	inner = map(x -> x * (Z2 * Z2'), inner);
+
+	inner = computeHinvTRecX(pMis, R,m, 0);
+	# inner = map(x -> x * (Z2 * Z2'), inner);
 	for i = 1:length(avgWds)
 		inner[i] = avgWds[i]^2 .* inner[i] * (Z2 * Z2');
 	end
-	outer = computeHinvTRecXarr(pMis, inner, 1);
+	outer = computeHinvTRecXarr(pMis, inner,m, 1);
 	for i = 1:length(avgWds)
 		#sum += MultOpT(HPinvs[i], (avgWds[i]^2) .* MultOp(HPinvs[i], R, Z2), Z2)
 		sum += outer[i]
@@ -225,17 +278,17 @@ function MultAll(avgWds, pMis, R, Z1, Z2, alpha, stepReg)
 	return sum + (alpha + stepReg)*R;
 end
 
-function calculateZ1(misfitCalc::Function, nfreq::Integer, mergedWd::Array, mergedRc::Array, pMis::Array, Z1::Matrix,Z2::Matrix, alpha1::Float64,stepReg::Float64)
+function calculateZ1(m, misfitCalc::Function, nfreq::Integer, mergedWd::Array, mergedRc::Array, pMis::Array, Z1::Matrix,Z2::Matrix, alpha1::Float64,stepReg::Float64)
 	## HERE WE  NEED TO MAKE SURE THAT Wd is equal in its real and imaginary parts.
 	rhs = zeros(ComplexF64, size(Z1));
-	rhsElement = computeHinvTRecXarr(pMis, mergedRc, 1);
+	rhsElement = computeHinvTRecXarr(pMis, mergedRc, m, 1);
 	for i = 1:nfreq
 		#rhs .+= (real(mean(mergedWd[i])).^2) .*  MultOpT(HinvPs[i], mergedRc[i], Z2);
-		rhs .+= (real(mean(mergedWd[i])).^2) .*  (rhsElement[i] * Z2);
+		rhs .+= (real(mean(mergedWd[i])).^2) .*  (rhsElement[i] * Z2');
 	end
 	rhs .+= (stepReg) .* Z1
 
-	OP = x-> MultAll(mean.(real.(mergedWd)), pMis, x, Z1, Z2, alpha1, stepReg);
+	OP = x-> MultAll(m, mean.(real.(mergedWd)), pMis, x, Z1, Z2, alpha1, stepReg);
 	eps = 1e-2
 	#M = zeros((size(Z1,1), 1))
 	#for i=1:size(M,1)
@@ -268,6 +321,34 @@ function getMergedData(pMisTemp::Array{RemoteChannel}, nfreq, nsrc, nrcv, nwork,
 		end
 	end
 	return mergedDobs, mergedWd
+end
+
+function getReducedDataDivided(mergedDobs, mergedWd, simSrcDim, TEmat, nwork, newSrcInd)
+	# get Dobs*TEmat
+	dobsTE = map(x-> x * TEmat, mergedDobs);
+
+	# get new Wd - matrix filled with mean of old Wd
+	sizeWD = size(dobsTE[1])
+	wdTE = map(x-> mean(x)/sqrt(simSrcDim) * ones(sizeWD), mergedWd);
+
+	NewDobsDivided = Array{Array{ComplexF64}}(undef,nwork * length(mergedDobs));
+	NewWdDivided = Array{Array{ComplexF64}}(undef,nwork * length(mergedWd));
+
+	for k=1:length(newSrcInd)
+		NewDobsDivided[k] = dobsTE[trunc(Integer, (k-1) / nwork) + 1][:,newSrcInd[k]];
+		NewWdDivided[k] = wdTE[trunc(Integer, (k-1) / nwork) + 1][:,newSrcInd[k]];
+		#NewWdDivided[k] = 1.0./(abs.(NewDobsDivided[k]) .+ 1e-1*mean(abs.(NewDobsDivided[k])));
+	end
+
+	return NewDobsDivided, NewWdDivided
+end
+
+function getSourcesDivided(sources, sourcesSubInd)
+	sourcesDivided = Array{SparseMatrixCSC}(undef,length(sourcesSubInd));
+	for k=1:length(sourcesSubInd)
+		sourcesDivided[k] = sources[:,sourcesSubInd[k]];
+	end
+	return sourcesDivided;
 end
 
 function freqContExtendedSources(mc,Z1,Z2,itersNum::Int64,originalSources::SparseMatrixCSC,nrcv, sourcesSubInd::Vector, pInv::InverseParam, pMis::Array{RemoteChannel},contDiv::Array{Int64}, windowSize::Int64,
@@ -330,6 +411,20 @@ for freqIdx = startFrom:endAtContDiv
 	for k=1:length(currentSrcInd)
 		OrininalSourcesDivided[k] = originalSources[:,currentSrcInd[k]];
 	end
+
+	# new sources split indexes
+
+	if simSrcDim == 1
+		newSrcInd = currentSrcInd
+	else
+		newSrcInd = [Int[] for i=1:length(currentSrcInd)]
+		for k=1:simSrcDim
+			for i=1:nfreq
+						append!(newSrcInd[(k % nwork) + 1 + (i-1)*nwork], k)
+			end
+		end
+	end
+
 	FafterGN = 0.0;
 	F_zero_prev = 0.0;
 	mc_prev = convert(Array{Float16},mc);
@@ -337,9 +432,23 @@ for freqIdx = startFrom:endAtContDiv
 		println("============================== New ALM Iter ======================================");
 		flush(Base.stdout)
 
-		pMisTemp = setSources(pMisTemp,OrininalSourcesDivided);
+		if simSrcDim==1
+			TEmat = Matrix(1.0I,nsrc,nsrc)
+		else
+			TEmat = rand([-1,1],(nsrc,simSrcDim));
+		end
+
+		reducedSourcesDivided = getSourcesDivided(originalSources * TEmat, newSrcInd)
+		reducedDobsDivided, reducedWdDivided = getReducedDataDivided(mergedDobs, mergedWd, simSrcDim,
+																	TEmat, nwork, newSrcInd)
+
+		pMisTemp = setSources(pMisTemp,reducedSourcesDivided);
+		pMisTemp = setDobs(pMisTemp,reducedDobsDivided)
+		pMisTemp = setWd(pMisTemp,reducedWdDivided)
 
 		# Here we get the current data with clean sources. Also define Ainv (which should be defined already but never mind...).
+
+		println("size mc FREQCONT: ", size(mc[:]));
 		t1 = time_ns();
 		Dc,F_zero, = computeMisfit(mc,pMisTemp,false);
 		e1 = time_ns();
@@ -352,28 +461,20 @@ for freqIdx = startFrom:endAtContDiv
 
 
 		pMisHps = pMisTemp[1:nwork:numOfCurrentProblems]
-		#t1 = time_ns();
-		#HinvPs = computeHinvTRec(pMisTemp[1:nwork:numOfCurrentProblems]);
-		#e1 = time_ns();
-		#print("runtime of HINVPs: "); println((e1 - t1)/1.0e9);
 
-		if simSrcDim==1
-			TEmat = Matrix(1.0I,nsrc,nsrc)
-		else
-			TEmat = rand([-1,1],(nsrc,simSrcDim));
-		end
 		mergedRc = Array{Array{ComplexF64}}(undef,nfreq); # Rc = Dc-Dobs, where Dc is the clean (wrt Z1,Z2) simulated data
 		for f = 1:nfreq
-			mergedRc[f] = zeros(ComplexF64,nrcv,nsrc);
+			mergedRc[f] = zeros(ComplexF64,nrcv,size(TEmat,2));
 			for l = 1:nwork
-				mergedRc[f][:, currentSrcInd[l]] .-= fetch(Dc[(f-1)*nwork+l])
+				mergedRc[f][:, newSrcInd[l]] .-= fetch(Dc[(f-1)*nwork+l])
 			end
-			mergedRc[f] .+= mergedDobs[f];
+			mergedRc[f] .+= reducedDobsDivided[f];
 		end
 
 		# iterations of alternating minimization between Z1 and Z2
-		println("Misfit with Zero Z2 (our computation): ", misfitCalc2(zeros(ComplexF64, (N_nodes, p)),zeros(ComplexF64, (p, nsrc)),mergedWd,mergedRc,nfreq,alpha1,alpha2, pMisHps))
-		mergedRcReduced = map(x-> x*TEmat, mergedRc)
+		println("Misfit with Zero Z2 (our computation): ", misfitCalc2(mc,zeros(ComplexF64, (N_nodes, p)),zeros(ComplexF64, (p, size(TEmat,2))),mergedWd ./ sqrt(simSrcDim),mergedRc,nfreq,alpha1,alpha2, pMisHps))
+		# mergedRcReduced = map(x-> x*TEmat, mergedRc)
+		mergedRcReduced = mergedRc;
 
 		pMisTempFetched = map(fetch, pMisTemp)
 
@@ -384,26 +485,27 @@ for freqIdx = startFrom:endAtContDiv
 
 		t1 = time_ns();
 		srcNum = simSrcDim == 1 ? nsrc : simSrcDim;
-		Z2 = calculateZ2(misfitCalc2, p, srcNum, nfreq, nrcv,nwork, numOfCurrentProblems, mergedWd ./ sqrt(simSrcDim), mergedRcReduced, pMisHps, pMisTempFetched, currentSrcInd, Z1, alpha2);
+		Z2 = calculateZ2(mc,misfitCalc2, p, srcNum, nfreq, nrcv,nwork, numOfCurrentProblems, mergedWd ./ sqrt(simSrcDim), mergedRcReduced, pMisHps, pMisTempFetched, currentSrcInd, Z1, alpha2);
 		e1 = time_ns();
 		# print("runtime of calculateZ2: "); println((e1 - t1)/1.0e9);
 
 		print("After First Z2 update: ");
-		mis = misfitCalc2(Z1,Z2,mergedWd ./ sqrt(simSrcDim),mergedRcReduced,nfreq,alpha1,alpha2, pMisHps);
+		mis = misfitCalc2(mc,Z1,Z2,mergedWd ./ sqrt(simSrcDim),mergedRcReduced,nfreq,alpha1,alpha2, pMisHps);
 		obj = objectiveCalc2(Z1,Z2,mis,alpha1,alpha2);
 		initialMis = mis
 		initialObj = obj
 		println("mis: ",mis,", obj: ",obj,", norm Z2 = ", norm(Z2)^2," norm Z1: ", norm(Z1)^2, ", [Time: ",(e1 - t1)/1.0e9," sec]")
 		for iters = 1:(doFive ? 5 : 1)
+		# for iters = 1:1
 
 			###################################################
 			#### COMPUTING Z1:
 			###################################################
 			t1 = time_ns();
-			Z1 = calculateZ1(misfitCalc2, nfreq, mergedWd ./ sqrt(simSrcDim), mergedRcReduced, pMisHps, Z1, Z2, alpha1, stepReg);
+			Z1 = calculateZ1(mc,misfitCalc2, nfreq, mergedWd ./ sqrt(simSrcDim), mergedRcReduced, pMisHps, Z1, Z2, alpha1, stepReg);
 			e1 = time_ns();
 			# print("runtime of calculateZ1: "); println((e1 - t1)/1.0e9);
-			mis = misfitCalc2(Z1,Z2,mergedWd ./ sqrt(simSrcDim) ,mergedRcReduced,nfreq,alpha1,alpha2, pMisHps);
+			mis = misfitCalc2(mc,Z1,Z2,mergedWd ./ sqrt(simSrcDim) ,mergedRcReduced,nfreq,alpha1,alpha2, pMisHps);
 			obj = objectiveCalc2(Z1,Z2,mis,alpha1,alpha2);
 			println("After Z1: mis: ",mis,", obj: ",obj,", norm Z2 = ", norm(Z2)^2," norm Z1: ", norm(Z1)^2, ", [Time: ",(e1 - t1)/1.0e9," sec]")
 
@@ -411,9 +513,9 @@ for freqIdx = startFrom:endAtContDiv
 			#### COMPUTING Z2:
 			###################################################
 			t1 = time_ns();
-			Z2 = calculateZ2(misfitCalc2, p, srcNum, nfreq, nrcv,nwork, numOfCurrentProblems, mergedWd ./ sqrt(simSrcDim), mergedRcReduced, pMisHps, pMisTempFetched, currentSrcInd, Z1, alpha2);
+			Z2 = calculateZ2(mc,misfitCalc2, p, srcNum, nfreq, nrcv,nwork, numOfCurrentProblems, mergedWd ./ sqrt(simSrcDim), mergedRcReduced, pMisHps, pMisTempFetched, currentSrcInd, Z1, alpha2);
 			e1 = time_ns();
-			mis = misfitCalc2(Z1,Z2,mergedWd ./ sqrt(simSrcDim) ,mergedRcReduced,nfreq,alpha1,alpha2, pMisHps);
+			mis = misfitCalc2(mc,Z1,Z2,mergedWd ./ sqrt(simSrcDim) ,mergedRcReduced,nfreq,alpha1,alpha2, pMisHps);
 			obj = objectiveCalc2(Z1,Z2,mis,alpha1,alpha2);
 			println("After Z2: mis: ",mis,", obj: ",obj,", norm Z2 = ", norm(Z2)^2," norm Z1: ", norm(Z1)^2, ", [Time: ",(e1 - t1)/1.0e9," sec]")
 			if mis < 0.3 * initialMis
@@ -441,39 +543,9 @@ for freqIdx = startFrom:endAtContDiv
                 #println("Ratio mis/F_zero is: ",mis/F_zero,", hence increasing alpha1 by 2: ",alpha1,",",alpha2);
 		#end
 
-		# get Dobs*TEmat
-		dobsTE = map(x-> x * TEmat, mergedDobs);
-
-		# get new Wd - matrix filled with mean of old Wd
-		sizeWD = size(dobsTE[1])
-		wdTE = map(x-> mean(x)/sqrt(simSrcDim) * ones(sizeWD), mergedWd);
-
-
-		# new sources split indexes
-		newSrcInd = [Int[] for i=1:length(currentSrcInd)]
-		for k=1:size(TEmat,2)
-			for i=1:nfreq
-                		append!(newSrcInd[(k % nwork) + 1 + (i-1)*nwork], k)
-			end
-        end
 
 		#divide Sources, new Dobs (Dobs*TEmat), original Dobs, New Wd, and original Wd
         NewSourcesDivided = Array{SparseMatrixCSC}(undef,length(newSrcInd));
-		NewDobsDivided = Array{Array{ComplexF64}}(undef,nwork * length(mergedDobs));
-		origDobsDivided = Array{Array{ComplexF64}}(undef,nwork * length(mergedDobs));
-		NewWdDivided = Array{Array{ComplexF64}}(undef,nwork * length(mergedWd));
-		origWdDivided = Array{Array{ComplexF64}}(undef,nwork * length(mergedWd));
-
-		for k=1:length(NewDobsDivided)
-				origDobsDivided[k] = mergedDobs[trunc(Integer, (k-1) / nwork) + 1][:,currentSrcInd[k]];
-				origWdDivided[k] = mergedWd[trunc(Integer, (k-1) / nwork) + 1][:,currentSrcInd[k]];
-		end
-
-    	for k=1:length(newSrcInd)
-			NewDobsDivided[k] = dobsTE[trunc(Integer, (k-1) / nwork) + 1][:,newSrcInd[k]];
-			NewWdDivided[k] = wdTE[trunc(Integer, (k-1) / nwork) + 1][:,newSrcInd[k]];
-			#NewWdDivided[k] = 1.0./(abs.(NewDobsDivided[k]) .+ 1e-1*mean(abs.(NewDobsDivided[k])));
-		end
 
 		newSources = originalSources * TEmat + Z1 * Z2;
     	for k=1:length(newSrcInd)
@@ -481,8 +553,8 @@ for freqIdx = startFrom:endAtContDiv
     	end
 
 		pMisTemp = setSources(pMisTemp,NewSourcesDivided);
-		pMisTemp = setDobs(pMisTemp,NewDobsDivided)
-		pMisTemp = setWd(pMisTemp,NewWdDivided)
+		pMisTemp = setDobs(pMisTemp,reducedDobsDivided)
+		pMisTemp = setWd(pMisTemp,reducedWdDivided)
 
 		if resultsFilename == ""
 			filename = "";
@@ -516,9 +588,6 @@ for freqIdx = startFrom:endAtContDiv
 		FafterGN = His.F[end];
 		println("Computed Misfit with new sources after GN : ",FafterGN);
 
-		pMisTemp = setSources(pMisTemp,OrininalSourcesDivided);
-		pMisTemp = setDobs(pMisTemp,origDobsDivided)
-		pMisTemp = setWd(pMisTemp,origWdDivided)
 
 		if hisMatFileName != ""
 			file = matopen(string(hisMatFileName,"_HisGN.mat"), "w");
@@ -530,6 +599,17 @@ for freqIdx = startFrom:endAtContDiv
 		His.Dc = []
 		push!(HIS,His)
 	end
+	origWdDivided = Array{Array{ComplexF64}}(undef,nwork * length(mergedWd));
+	origDobsDivided = Array{Array{ComplexF64}}(undef,nwork * length(mergedDobs));
+
+	for k=1:length(origDobsDivided)
+			origDobsDivided[k] = mergedDobs[trunc(Integer, (k-1) / nwork) + 1][:,currentSrcInd[k]];
+			origWdDivided[k] = mergedWd[trunc(Integer, (k-1) / nwork) + 1][:,currentSrcInd[k]];
+	end
+
+	pMisTemp = setSources(pMisTemp,OrininalSourcesDivided);
+	pMisTemp = setDobs(pMisTemp,origDobsDivided)
+	pMisTemp = setWd(pMisTemp,origWdDivided)
 end
 
 pInv.regularizer = regfun;
