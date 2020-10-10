@@ -12,12 +12,12 @@ using jInv.InverseSolve
 using jInv.LinearSolvers
 using Multigrid
 
-# NumWorkers = 4;
-# if nworkers() == 1
-# 	addprocs(NumWorkers);
-# elseif nworkers() < NumWorkers
-#  	addprocs(NumWorkers - nworkers());
-# end
+NumWorkers = 4;
+if nworkers() == 1
+	addprocs(NumWorkers);
+elseif nworkers() < NumWorkers
+ 	addprocs(NumWorkers - nworkers());
+end
 
 @everywhere begin
 	using jInv.InverseSolve
@@ -31,7 +31,7 @@ using Multigrid
 	using KrylovMethods
 end
 
-plotting = true;
+plotting = false;
 if plotting
 	using jInvVisPyPlot
 	using PyPlot
@@ -171,7 +171,7 @@ end
 ########################################################################################################################
 
 (Q,P,pMis,SourcesSubInd,contDiv,Iact,sback,mref,boundsHigh,boundsLow) =
-	setupFWI(m,dataFilenamePrefix,plotting,workersFWI,maxBatchSize,Ainv,SSDFun,useFilesForFields);
+	setupFWI(m,dataFilenamePrefix,plotting,workersFWI,maxBatchSize,Ainv,SSDFun,useFilesForFields, true);
 
 ########################################################################################################
 # Setting up the inversion for slowness instead of velocity:
@@ -312,9 +312,13 @@ Z2 = 0.1*rand(ComplexF64, (p, simSrcDim)) .+ 0.01;
 windowSize = 4;
 updateMref = false;
 #####################################################################################################
-cyc = 0;startFrom = 1;endAtContDiv = length(contDiv)-3;
-mc,Z1,Z2,alpha1,alpha2, = freqContExtendedSourcesSS(mc,Z1,Z2,simSrcDim,10,Q,size(P,2),
-				SourcesSubInd,pInv, pMis,contDiv, windowSize,resultsFilename,dump,Iact,sback,alpha1,alpha2,"",startFrom,endAtContDiv,cyc,GN,updateMref);
+# cyc = 0;startFrom = 1;endAtContDiv = length(contDiv)-3;
+cyc = 0;startFrom = 1;endAtContDiv = length(omega)-3;
+
+mc,Z1,Z2,alpha1,alpha2, = freqContExtendedSourcesSSFreqOnlySplit(mc,Z1,Z2,simSrcDim,10,Q,size(P,2),
+				pInv, pMis, windowSize,resultsFilename,dump,Iact,sback,alpha1,alpha2,"",startFrom,endAtContDiv,cyc,GN,updateMref);
+# mc,Z1,Z2,alpha1,alpha2, = freqContExtendedSourcesSS(mc,Z1,Z2,simSrcDim,10,Q,size(P,2),
+# 				SourcesSubInd,pInv, pMis,contDiv, windowSize,resultsFilename,dump,Iact,sback,alpha1,alpha2,"",startFrom,endAtContDiv,cyc,GN,updateMref);
 saveCheckpoint(resultsFilename,mc,Z1,Z2,alpha1,alpha2,pInv,cyc);
 #=
 #####################################################################################################
