@@ -31,7 +31,7 @@ end
 	using KrylovMethods
 end
 
-plotting = false;
+plotting = true;
 if plotting
 	using jInvVisPyPlot
 	using PyPlot
@@ -78,8 +78,8 @@ modelDir 	= pwd();
 include(string(FWIDriversPath,"generateMrefOverthrust.jl"));
 omega = [2.5,3.0,3.5,4.0,5.0]*2*pi; #Marmousi
 
-alpha1 = 1e1;
-alpha2 = 1e1;
+alpha1 = 5e2;
+alpha2 = 5e2;
 # stepReg = 1e4; #1e2;#4e+3
 
 #######################################################
@@ -312,14 +312,15 @@ Z2 = 0.1*rand(ComplexF64, (p, simSrcDim)) .+ 0.01;
 windowSize = 4;
 updateMref = false;
 #####################################################################################################
-# cyc = 0;startFrom = 1;endAtContDiv = length(contDiv)-3;
-cyc = 0;startFrom = 1;endAtContDiv = length(omega)-3;
-
+#cyc = 0;startFrom = 4;endAtContDiv = length(omega)-1;
+cyc = 0;startFrom = 1;endAtContDiv = length(omega)-2;
+#=
 mc,Z1,Z2,alpha1,alpha2, = freqContExtendedSourcesSSFreqOnlySplit(mc,Z1,Z2,simSrcDim,10,Q,size(P,2),
 				pInv, pMis, windowSize,resultsFilename,dump,Iact,sback,alpha1,alpha2,"",startFrom,endAtContDiv,cyc,GN,updateMref);
 # mc,Z1,Z2,alpha1,alpha2, = freqContExtendedSourcesSS(mc,Z1,Z2,simSrcDim,10,Q,size(P,2),
 # 				SourcesSubInd,pInv, pMis,contDiv, windowSize,resultsFilename,dump,Iact,sback,alpha1,alpha2,"",startFrom,endAtContDiv,cyc,GN,updateMref);
 saveCheckpoint(resultsFilename,mc,Z1,Z2,alpha1,alpha2,pInv,cyc);
+=#
 #=
 #####################################################################################################
 endAtContDiv = length(contDiv)-1
@@ -339,10 +340,13 @@ regfun(m,mref,M) = wdiffusionReg(m,mref,M,Iact=Iact,C=[]);
 pInv.regularizer = regfun;
 #####################################################################################################
 pInv.maxIter = 10;
+mc,Z1,Z2,alpha1,alpha2,pInv.alpha,pInv.mref = loadCheckpoint(resultsFilename,cyc);
+dump(mc, 1, 1,  pInv, pMis, "mc.png")
+# mc, = freqCont(mc, pInv, pMis,contDiv, 3,resultsFilename,dump,"",3,1,GN);
 mc, = freqCont(mc, Q, size(P,2), simSrcDim,SourcesSubInd, pInv, pMis,contDiv, 4,resultsFilename,dump,"",4,1,GN);
 mc, = freqCont(mc, Q, size(P,2), simSrcDim,SourcesSubInd, pInv, pMis,contDiv, 4,resultsFilename,dump,"",4,2,GN);
 #=
-# mc,Z1,Z2,alpha1,alpha2,pInv.alpha,pInv.mref = loadCheckpoint(resultsFilename,cyc);
+mc,Z1,Z2,alpha1,alpha2,pInv.alpha,pInv.mref = loadCheckpoint(resultsFilename,cyc);
 
 cyc = 2;startFrom = windowSize;
 mc,Z1,Z2,alpha1,alpha2, = freqContExtendedSourcesSS(mc,Z1,Z2,simSrcDim,20,Q,size(P,2),

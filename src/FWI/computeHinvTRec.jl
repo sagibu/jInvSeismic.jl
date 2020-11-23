@@ -3,8 +3,8 @@ export computeHinvTRec
 function computeHinvTRec(pMis::Array{RemoteChannel})
 HinvTRec = Array{Array{ComplexF64}}(undef,length(pMis))
 @sync begin
-	@async begin
-		for k=1:length(pMis)
+	for k=1:length(pMis)
+		@async begin
 			HinvTRec[k] = remotecall_fetch(computeHinvTRec,pMis[k].where,pMis[k]);
 		end
 	end
@@ -58,9 +58,11 @@ pMis = fetch(pMisRF)
 H = calculateShiftedH(pMis, m)
 if doTranspose == 0
 	HinvTP, = solveLinearSystem(H,x,pMis.pFor.ForwardSolver,doTranspose);
-	return complex(Matrix(pMis.pFor.Receivers')) * HinvTP;
+	#return complex(Matrix(pMis.pFor.Receivers')) * HinvTP;
+	return complex(pMis.pFor.Receivers' * HinvTP);
 else
-	HinvTP, = solveLinearSystem(H,complex(Matrix(pMis.pFor.Receivers) * x),pMis.pFor.ForwardSolver,doTranspose);
+	#HinvTP, = solveLinearSystem(H,complex(Matrix(pMis.pFor.Receivers) * x),pMis.pFor.ForwardSolver,doTranspose);
+	HinvTP, = solveLinearSystem(H,complex(pMis.pFor.Receivers * x),pMis.pFor.ForwardSolver,doTranspose);
 	return  HinvTP;
 end
 end
@@ -68,9 +70,14 @@ end
 function computeHinvTRecX(pMis::Array{RemoteChannel}, x, m, doTranspose=1)
 HinvTRec = Array{Array{ComplexF64}}(undef,length(pMis))
 @sync begin
-	@async begin
 		for k=1:length(pMis)
+	@async begin
+			println("CALCULATE HINVTREC on worker: ", pMis[k].where);
 			HinvTRec[k] = remotecall_fetch(computeHinvTRec,pMis[k].where,pMis[k],x, m,doTranspose);
+			println("DONE CALCULATE HINVTREC FOR: ", k);
+			#@time begin
+			#	HinvTRec[k] = computeHinvTRec(pMis[k],x, m,doTranspose);
+			#end
 		end
 	end
 end
@@ -80,9 +87,12 @@ end
 function computeHinvTRecXarr(pMis::Array{RemoteChannel}, x, m, doTranspose=1)
 HinvTRec = Array{Array{ComplexF64}}(undef,length(pMis))
 @sync begin
+	for k=1:length(pMis)
 	@async begin
-		for k=1:length(pMis)
 			HinvTRec[k] = remotecall_fetch(computeHinvTRec,pMis[k].where,pMis[k],x[k], m,doTranspose);
+			#@time begin
+			#	HinvTRec[k] = computeHinvTRec(pMis[k],x[k], m,doTranspose);
+			#end
 		end
 	end
 end

@@ -151,16 +151,42 @@ function calculateZ2(m,misfitCalc::Function, p::Integer, nsrc::Integer, nfreq::I
 	## HERE WE  NEED TO MAKE SURE THAT Wd is equal in its real and imaginary parts.
 	rhs = zeros(ComplexF64, (p, nsrc));
 	lhs = zeros(ComplexF64, (p,p));
-
+	
+	println("CALC Z2 HINVTREC");
 	HinvPsZ1 = computeHinvTRecX(pMis, Z1, m, 0);
 
-	for i = 1:nfreq
-		meanWd = mean(mergedWd[i])
-		#lhs .+= (real(meanWd).^2) .* Z1' * HinvPs[i] * HinvPs[i]' * Z1;
-		lhs .+= (real(meanWd).^2) .* HinvPsZ1[i]' * HinvPsZ1[i];
-		#rhs .+= (real(meanWd).^2) .* Z1' * HinvPs[i] * (mergedRc[i]);
-		rhs .+= (real(meanWd).^2) .* HinvPsZ1[i]' * (mergedRc[i]);
+	function calculateLhs(meanWd,Z1,HinvP)
+		return meanWd .* HinvP' * HinvP;	
 	end
+
+
+	function calculateRhs(meanWd,HinvP,mergedRc)
+		return meanWd .* HinvP' * mergedRc;
+	end
+
+	lhsides = Array{Array{ComplexF64}}(undef,nfreq)
+	rhsides = Array{Array{ComplexF64}}(undef,nfreq)
+		
+	@sync begin
+	 		for k=1:nfreq
+		@async begin
+			meanWd = mean(mergedWd[k])
+			meanWdC = (real(meanWd).^2)
+				lhsides[k] = remotecall_fetch(calculateLhs, k % nworkers() + 1,meanWdC,Z1,HinvPsZ1[k]);
+				rhsides[k] = remotecall_fetch(calculateRhs, k % nworkers() + 1,meanWdC,HinvPsZ1[k], mergedRc[k]);
+	 		end
+	 	end
+	end
+#	for i = 1:nfreq
+#		meanWd = mean(mergedWd[i])
+#		#lhs .+= (real(meanWd).^2) .* Z1' * HinvPs[i] * HinvPs[i]' * Z1;
+#		lhs .+= (real(meanWd).^2) .* HinvPsZ1[i]' * HinvPsZ1[i];
+#		#rhs .+= (real(meanWd).^2) .* Z1' * HinvPs[i] * (mergedRc[i]);
+#		rhs .+= (real(meanWd).^2) .* HinvPsZ1[i]' * (mergedRc[i]);
+#	end
+
+	lhs = sum(lhsides)
+	rhs = sum(rhsides)
 	lhs += alpha * I;
 
 	return lhs\rhs;
@@ -247,7 +273,7 @@ end
 function MultAll(m, avgWds, pMis, R, Z1, Z2, alpha, stepReg)
 	sum = zeros(ComplexF64, size(R))
 
-	# partials = Array{Array{ComplexF64}}(undef,length(avgWds))
+	#partials = Array{Array{ComplexF64}}(undef,length(avgWds))
 	# function calculateForFreq(HPinv, avgWd, R, Z2)
 	# 	return MultOpT(HPinv, (avgWd^2) .* MultOp(HPinv, R, Z2), Z2)
 	# end
@@ -264,9 +290,22 @@ function MultAll(m, avgWds, pMis, R, Z1, Z2, alpha, stepReg)
 
 	inner = computeHinvTRecX(pMis, R,m, 0);
 	# inner = map(x -> x * (Z2 * Z2'), inner);
-	for i = 1:length(avgWds)
-		inner[i] = avgWds[i]^2 .* inner[i] * (Z2 * Z2');
+
+	function calculateInner(avgWd, inner, Z2)
+		return avgWd^2 .* inner * (Z2 * Z2');
 	end
+	@sync begin
+	 		for k=1:length(avgWds)
+		@async begin
+	 			inner[k] = remotecall_fetch(calculateInner,
+	 				k % nworkers() + 1,avgWds[k],inner[k],Z2);
+	 		end
+	 	end
+	end
+#	for i = 1:length(avgWds)
+#		inner[i] = avgWds[i]^2 .* inner[i] * (Z2 * Z2');
+#	end
+
 	outer = computeHinvTRecXarr(pMis, inner,m, 1);
 	for i = 1:length(avgWds)
 		#sum += MultOpT(HPinvs[i], (avgWds[i]^2) .* MultOp(HPinvs[i], R, Z2), Z2)
@@ -280,12 +319,41 @@ end
 
 function calculateZ1(m, misfitCalc::Function, nfreq::Integer, mergedWd::Array, mergedRc::Array, pMis::Array, Z1::Matrix,Z2::Matrix, alpha1::Float64,stepReg::Float64)
 	## HERE WE  NEED TO MAKE SURE THAT Wd is equal in its real and imaginary parts.
-	rhs = zeros(ComplexF64, size(Z1));
+	#rhs = zeros(ComplexF64, size(Z1));
 	rhsElement = computeHinvTRecXarr(pMis, mergedRc, m, 1);
-	for i = 1:nfreq
-		#rhs .+= (real(mean(mergedWd[i])).^2) .*  MultOpT(HinvPs[i], mergedRc[i], Z2);
-		rhs .+= (real(mean(mergedWd[i])).^2) .*  (rhsElement[i] * Z2');
+	rhsides = Array{Array{ComplexF64}}(undef,nfreq)
+	
+
+	function calculateRhs(meanWd,Z2,rhsElement)
+		return meanWd.*  (rhsElement * Z2');
 	end
+	
+	println("CALC Z1 rhs");	
+	@sync begin
+	 		for k=1:nfreq
+		@async begin
+		#	rhs .+= (real(mean(mergedWd[i])).^2) .*  (rhsElement[i] * Z2');
+			meanWd = mean(mergedWd[k])
+			meanWdC = (real(meanWd).^2)
+			rhsides[k] = remotecall_fetch(calculateRhs, k % nworkers() + 1,meanWdC,Z2, rhsElement[k]);
+	 		end
+	 	end
+	end
+#	for i = 1:nfreq
+#		meanWd = mean(mergedWd[i])
+#		#lhs .+= (real(meanWd).^2) .* Z1' * HinvPs[i] * HinvPs[i]' * Z1;
+#		lhs .+= (real(meanWd).^2) .* HinvPsZ1[i]' * HinvPsZ1[i];
+#		#rhs .+= (real(meanWd).^2) .* Z1' * HinvPs[i] * (mergedRc[i]);
+#		rhs .+= (real(meanWd).^2) .* HinvPsZ1[i]' * (mergedRc[i]);
+#	end
+
+	rhs = sum(rhsides)
+	
+#	for i = 1:nfreq
+#		#rhs .+= (real(mean(mergedWd[i])).^2) .*  MultOpT(HinvPs[i], mergedRc[i], Z2);
+#		rhs .+= (real(mean(mergedWd[i])).^2) .*  (rhsElement[i] * Z2');
+#	end
+
 	rhs .+= (stepReg) .* Z1
 
 	OP = x-> MultAll(m, mean.(real.(mergedWd)), pMis, x, Z1, Z2, alpha1, stepReg);
@@ -495,8 +563,8 @@ for freqIdx = startFrom:endAtContDiv
 		initialMis = mis
 		initialObj = obj
 		println("mis: ",mis,", obj: ",obj,", norm Z2 = ", norm(Z2)^2," norm Z1: ", norm(Z1)^2, ", [Time: ",(e1 - t1)/1.0e9," sec]")
-		for iters = 1:(doFive ? 5 : 1)
-		# for iters = 1:1
+#		for iters = 1:(doFive ? 5 : 1)
+		for iters = 1:0
 
 			###################################################
 			#### COMPUTING Z1:
@@ -659,7 +727,8 @@ for freqIdx = startFrom:endAtContDiv
 	println("\n======= New Continuation Stage: selecting continuation batches: ",reqIdx1," to ",reqIdx2,"=======\n");
 
 	nfreq = length(pMisTemp);
-
+	wheres = map(x -> x.where, pMisTemp);
+	println("pMisTemp on workers: ", wheres);
 	pMisTempFetched = map(fetch, pMisTemp);
 	mergedDobs = map(x -> x.dobs,pMisTempFetched)
 	mergedWd = map(x-> x.Wd,pMisTempFetched)
@@ -700,8 +769,8 @@ for freqIdx = startFrom:endAtContDiv
 		mc_prev = convert(Array{Float16},mc);
 
 
-		pMisHps = pMisTemp[1:nwork:numOfCurrentProblems]
-
+		#pMisHps = pMisTemp[1:nwork:numOfCurrentProblems]
+		pMisHps = pMisTemp
 		mergedRc = Array{Array{ComplexF64}}(undef,nfreq); # Rc = Dc-Dobs, where Dc is the clean (wrt Z1,Z2) simulated data
 		for f = 1:nfreq
 			mergedRc[f] = reducedDobs[f] .- fetch(Dc[f]);
@@ -730,9 +799,10 @@ for freqIdx = startFrom:endAtContDiv
 		obj = objectiveCalc2(Z1,Z2,mis,alpha1,alpha2);
 		initialMis = mis
 		initialObj = obj
+
 		println("mis: ",mis,", obj: ",obj,", norm Z2 = ", norm(Z2)^2," norm Z1: ", norm(Z1)^2, ", [Time: ",(e1 - t1)/1.0e9," sec]")
 		for iters = 1:(doFive ? 5 : 1)
-		# for iters = 1:1
+		#for iters = 1:0
 
 			###################################################
 			#### COMPUTING Z1:
@@ -804,12 +874,12 @@ for freqIdx = startFrom:endAtContDiv
 
 		flush(Base.stdout)
 		t1 = time_ns();
-
 		if method == "projGN"
 			mc,Dc,flag,His = projGNCG(mc,pInv,pMisTE,dumpResults = dumpGN);
 		elseif method == "barrierGN"
 			mc,Dc,flag,His = barrierGNCG(mc,pInv,pMisTE,rho=1.0,dumpResults = dumpGN);
 		end
+
 		e1 = time_ns();
 		print("runtime of GN:"); println((e1 - t1)/1.0e9);
 

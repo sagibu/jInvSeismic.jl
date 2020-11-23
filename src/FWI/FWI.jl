@@ -114,7 +114,7 @@ function getFWIparamFreqOnlySplit(omega::Array{Float64}, WaveletCoef::Array{Comp
 	pFor   = Array{RemoteChannel}(undef,length(omega));
 	for k=1:length(omega)
 		getFWIparamInternalFreqOnly(omega[k],WaveletCoef[k], gamma,Sources,Receivers,zeros(FieldsType,0), Mesh,
-									ForwardSolver, forwardSolveBatchSize ,ActualWorkers,pFor,k,useFilesForFields);
+									ForwardSolver, forwardSolveBatchSize ,ActualWorkers[((k-1) % numWorkers) + 1],pFor,k,useFilesForFields);
 	end
 	return pFor,0,0 # Array of Remote Refs
 end
@@ -124,20 +124,20 @@ function getFWIparamInternalFreqOnly(omega::Float64, WaveletCoef::ComplexF64,gam
 							Receivers::Union{Vector{Float64},SparseMatrixCSC,Array{Float64,2}},
 							fields::Array{FieldsType}, Mesh::RegularMesh,
 							ForwardSolver:: AbstractSolver, forwardSolveBatchSize::Int64,
-							Workers::Array{Int64}, pFor::Array{RemoteChannel},startPF::Int64,useFilesForFields::Bool = false)
+							Workers::Int64, pFor::Array{RemoteChannel},startPF::Int64,useFilesForFields::Bool = false)
 	i = startPF; nextidx() = (idx=i; i+=1; idx)
 	nsrc  = size(Sources,2);
 	numWorkers = length(Workers);
 	# send out jobs
-	@sync begin
-		for p=Workers
-			@async begin
-					pFor[startPF] = initRemoteChannel(getFWIparamInternal,p, omega,WaveletCoef,  gamma, Sources, Receivers, fields, Mesh,
+	#@sync begin
+		#for p=Workers
+		#	@async begin
+					pFor[startPF] = initRemoteChannel(getFWIparamInternal,Workers, omega,WaveletCoef,  gamma, Sources, Receivers, fields, Mesh,
 																			copySolver(ForwardSolver),forwardSolveBatchSize,useFilesForFields);
 					wait(pFor[startPF]);
-			end
-		end
-	end
+		#	end
+		#end
+	#end
 	return pFor # Array of Remote Refs
 end
 

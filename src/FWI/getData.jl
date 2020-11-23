@@ -65,15 +65,21 @@ function getData(m,pFor::FWIparam,doClear::Bool=false)
 	
 	Ainv.doClear = 1;
 	for k_batch = 1:numBatches
+		println("handling batch ",k_batch," out of ",numBatches);
 		batchIdxs = (k_batch-1)*batchSize + 1 : min(k_batch*batchSize,nsrc);
 		if length(length(batchIdxs))==batchSize
-			U[:] = Matrix(Qs[:,batchIdxs]);
+			U[:] = convert(Array{FieldsType},Matrix(Qs[:,batchIdxs]));
+			#U[:] = Matrix(Qs[:,batchIdxs]);
 		else
 			U = convert(Array{FieldsType},Matrix(Qs[:,batchIdxs]));
 		end
-		U,Ainv = solveLinearSystem(H,U,Ainv,0)
 		
-		
+		@time begin
+			ts = time_ns();
+			U,Ainv = solveLinearSystem(H,U,Ainv,0)
+			es = time_ns();
+			println("Runtime of Solve LS: ", (es - ts) / 10e9);
+		end
 		# pic = round(Int64,rand()*1000);
 		# u = reshape(real(U[:,1]),M.n[1]+1,M.n[2]+1);
 		# figure(pic)
