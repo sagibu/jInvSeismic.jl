@@ -2,7 +2,6 @@ using Revise
 using Distributed
 using DelimitedFiles
 using MAT
-using JLD
 using Multigrid.ParallelJuliaSolver
 using jInvSeismic.FWI
 using jInvSeismic.Utils
@@ -12,12 +11,12 @@ using jInv.InverseSolve
 using jInv.LinearSolvers
 using Multigrid
 
-NumWorkers = 4;
-if nworkers() == 1
-	addprocs(NumWorkers);
-elseif nworkers() < NumWorkers
- 	addprocs(NumWorkers - nworkers());
-end
+# NumWorkers = 4;
+# if nworkers() == 1
+# 	addprocs(NumWorkers);
+# elseif nworkers() < NumWorkers
+#  	addprocs(NumWorkers - nworkers());
+# end
 
 @everywhere begin
 	using jInv.InverseSolve
@@ -38,7 +37,6 @@ if plotting
 	close("all")
 end
 
-println(pwd())
 @everywhere FWIDriversPath = "./";
 include(string(FWIDriversPath,"prepareFWIDataFiles.jl"));
 include(string(FWIDriversPath,"setupFWI.jl"));
@@ -48,31 +46,56 @@ dataDir 	= pwd();
 resultsDir 	= pwd();
 modelDir 	= pwd();
 
+# SEG = "SEG"
+# MARMOUSI = "MARMOUSI"
+# OVERTHRUST = "OVERTHRUST"
+# UP = "UP"
+
+@enum Model SEG MARMOUSI OVERTHRUST UP
+chosenModel = SEG # choose one of the above models
+
 ########################################################################################################
 
-########## uncomment block for SEG ###############
+maxBatchSize = 256; # use smaller value for 3D
+useFilesForFields = false; # wheter to save fields to files
 
- dim     = 2;
- pad     = 30;
- jumpSrc = 5;
- jumpRcv = 1;
- newSize = [600,300];
 
-(m,Minv,mref,boundsHigh,boundsLow) = readModelAndGenerateMeshMref(modelDir,"examples/SEGmodel2Dsalt.dat",dim,pad,[0.0,13.5,0.0,4.2],newSize,1.752,2.9);
-# #(m,Minv,mref,boundsHigh,boundsLow) = readModelAndGenerateMeshMref(modelDir,"examples/SEGmodel2D_edges.dat",dim,pad,[0.0,13.5,0.0,4.2],newSize,1.752,2.9, false);
-#(m,Minv,mref,boundsHigh,boundsLow) = readModelAndGenerateMeshMref(modelDir,"examples/SEGmodel2D_up.dat",dim,pad,[0.0,13.5,0.0,4.2],newSize,1.752,2.9, false);
-#omega = [2.0,2.5,3.0,3.5,4.5,5.5,6.5]*2*pi; #SEG
-#omega = [3.0,3.5,4.0,4.5,5.0,5.5,6.5]*2*pi; #SEG
-omega = [3.0,3.3,3.6,3.9,4.2,4.5,5.0,5.5,6.5]*2*pi; #SEG
-#omega = [3.5,3.8,4.1,4.5,5.5,6.5]*2*pi; #SEG
-#omega = Array(3.0:0.4:6.5)*2*pi;
-offset  = newSize[1];  #ceil(Int64,(newSize[1]*(8.0/13.5)));
-println("Offset is: ",offset," cells.")
-#
-#alpha1 = 5e-1;
-alpha1 = 1e1;
-alpha2 = 3e1;
-# stepReg = 1e4; #1e2;#4e+3
+if chosenModel == SEG || chosenModel == UP
+	########## uncomment block for SEG ###############
+	 dim     = 2;
+	 pad     = 30;
+	 jumpSrc = 5;
+	 jumpRcv = 1;
+	 newSize = [600,300];
+
+
+	 if chosenModel == SEG
+		 (m,Minv,mref,boundsHigh,boundsLow) = readModelAndGenerateMeshMref(modelDir,
+		 	"examples/SEGmodel2Dsalt.dat",dim,pad,[0.0,13.5,0.0,4.2],newSize,1.752,2.9);
+	 else
+		 (m,Minv,mref,boundsHigh,boundsLow) = readModelAndGenerateMeshMref(modelDir,
+		 	"examples/SEGmodel2D_up.dat",dim,pad,[0.0,13.5,0.0,4.2],newSize,1.752,2.9, false);
+	 end
+	omega = [3.0,3.3,3.6,3.9,4.2,4.5,5.0,5.5,6.5]*2*pi;
+	offset  = newSize[1];
+	println("Offset is: ",offset," cells.")
+	alpha1 = 1e1;
+	alpha2 = 3e1;
+elseif chosenModel == MARMOUSI
+	include(string(FWIDriversPath,"generateMrefMarmousi.jl"));
+	omega = [3.0,3.5,4.5,6.0,8.0,8.5]*2*pi; #Marmousi
+	alpha1 = 1e-1;
+	alpha2 = 1e0;
+elseif chosenModel == OVERTHRUST
+	include(string(FWIDriversPath,"generateMrefOverthrust.jl"));
+	omega = [2.5,3.0,3.5,4.0,5.0]*2*pi; #Marmousi
+
+	alpha1 = 5e2;
+	alpha2 = 5e2;
+else
+	println("Wrong model chosen, driver shutting down");
+	exit(1);
+end
 
 ##################################################
 
@@ -101,15 +124,10 @@ alpha2 = 1e0;
 =#
 #######################################################
 
-figure(1,figsize = (22,10));
-plotModel(m,includeMeshInfo=true,M_regular = Minv,cutPad=pad,limits=[1.5,4.5],figTitle="orig",filename="orig3.png");
-
-maxBatchSize = 256;
-useFilesForFields = false;
 
 # ###################################################################################################################
-dataFilenamePrefix = string(dataDir,"/DATA_Marmousi",tuple((Minv.n)...));
-resultsFilename = string(resultsDir,"/FWI_ExtSrc",tuple((Minv.n)...));
+dataFilenamePrefix = string(dataDir,"/DATA_",tuple((Minv.n)...));
+resultsFilename = string(resultsDir,"/FWI_",tuple((Minv.n)...));
 #######################################################################################################################
 writedlm(string(resultsFilename,"_mtrue.dat"),convert(Array{Float16},m));
 writedlm(string(resultsFilename,"_mref.dat"),convert(Array{Float16},mref));
@@ -141,8 +159,11 @@ println(string("The workers that we allocate for FWI are:",workersFWI));
 
 
 
+figure(1,figsize = (22,10));
+plotModel(m,includeMeshInfo=true,M_regular = Minv,cutPad=pad,limits=[1.5,4.5],figTitle="mref",filename="orig.png");
+
 figure(2,figsize = (22,10));
-plotModel(mref,includeMeshInfo=true,M_regular = Minv,cutPad=pad,limits=[1.5,4.5],figTitle="mref",filename="mref2.png");
+plotModel(mref,includeMeshInfo=true,M_regular = Minv,cutPad=pad,limits=[1.5,4.5],figTitle="mref",filename="mref.png");
 
 prepareFWIDataFiles(m,Minv,mref,boundsHigh,boundsLow,dataFilenamePrefix,omega,ones(ComplexF64,size(omega)),
 									pad,ABLpad,jumpSrc,jumpRcv,offset,workersFWI,maxBatchSize,Ainv,useFilesForFields);
@@ -155,21 +176,21 @@ prepareFWIDataFiles(m,Minv,mref,boundsHigh,boundsLow,dataFilenamePrefix,omega,on
 ########################################################################################################################
 ## Data that is generated through frequency domain simulation
 ### Read receivers and sources files
-RCVfile = string(dataFilenamePrefix,"_rcvMap.dat");
-SRCfile = string(dataFilenamePrefix,"_srcMap.dat");
-srcNodeMap = readSrcRcvLocationFile(SRCfile,Minv);
-rcvNodeMap = readSrcRcvLocationFile(RCVfile,Minv);
-
-DobsFD = Array{Array{ComplexF64,2}}(undef,length(omega));
-WdFD = Array{Array{ComplexF64,2}}(undef,length(omega));
-
-for k = 1:length(omega)
-	omRound = string(round((omega[k]/(2*pi))*100.0)/100.0);
-	(Dk,Wk) =  readDataFileToDataMat(string(dataFilenamePrefix,"_freq",omRound,".dat"),srcNodeMap,rcvNodeMap);
-	DobsFD[k] = Dk;
-	WdFD[k] = Wk;
-end
-
+# RCVfile = string(dataFilenamePrefix,"_rcvMap.dat");
+# SRCfile = string(dataFilenamePrefix,"_srcMap.dat");
+# srcNodeMap = readSrcRcvLocationFile(SRCfile,Minv);
+# rcvNodeMap = readSrcRcvLocationFile(RCVfile,Minv);
+#
+# DobsFD = Array{Array{ComplexF64,2}}(undef,length(omega));
+# WdFD = Array{Array{ComplexF64,2}}(undef,length(omega));
+#
+# for k = 1:length(omega)
+# 	omRound = string(round((omega[k]/(2*pi))*100.0)/100.0);
+# 	(Dk,Wk) =  readDataFileToDataMat(string(dataFilenamePrefix,"_freq",omRound,".dat"),srcNodeMap,rcvNodeMap);
+# 	DobsFD[k] = Dk;
+# 	WdFD[k] = Wk;
+# end
+#
 
 
 ########################################################################################################################
@@ -482,4 +503,3 @@ te = time_ns();
 
 println("runtime of inversion");
 println((ts - te)/1.0e9);
-
