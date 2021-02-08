@@ -55,14 +55,16 @@ end
 
 function computeHinvTRec(pMisRF::RemoteChannel, x, m, doTranspose)
 pMis = fetch(pMisRF)
-H = calculateShiftedH(pMis, m)
+#H = calculateShiftedH(pMis, m)
 if doTranspose == 0
-	HinvTP, = solveLinearSystem(H,x,pMis.pFor.ForwardSolver,doTranspose);
+	#HinvTP, = solveLinearSystem(H,x,pMis.pFor.ForwardSolver,doTranspose);
+	HinvTP, = solveLinearSystem(spzeros(ComplexF64,0,0),x,pMis.pFor.ForwardSolver,doTranspose);
 	#return complex(Matrix(pMis.pFor.Receivers')) * HinvTP;
 	return complex(pMis.pFor.Receivers' * HinvTP);
 else
-	#HinvTP, = solveLinearSystem(H,complex(Matrix(pMis.pFor.Receivers) * x),pMis.pFor.ForwardSolver,doTranspose);
-	HinvTP, = solveLinearSystem(H,complex(pMis.pFor.Receivers * x),pMis.pFor.ForwardSolver,doTranspose);
+	#####HinvTP, = solveLinearSystem(H,complex(Matrix(pMis.pFor.Receivers) * x),pMis.pFor.ForwardSolver,doTranspose);
+	#HinvTP, = solveLinearSystem(H,complex(pMis.pFor.Receivers * x),pMis.pFor.ForwardSolver,doTranspose);
+	HinvTP, = solveLinearSystem(spzeros(ComplexF64,0,0),complex(pMis.pFor.Receivers * x),pMis.pFor.ForwardSolver,doTranspose);
 	return  HinvTP;
 end
 end

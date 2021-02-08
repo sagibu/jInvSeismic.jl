@@ -45,6 +45,7 @@ function getSensTMatVec(v::Vector,m::Vector,pFor::FWIparam)
 	for k_batch = 1:numBatches
 		batchIdxs = (k_batch-1)*batchSize + 1 : min(k_batch*batchSize,nsrc);
 		V = P*Vdatashape[:,batchIdxs];
+		println("SOLVE LINEAR GET SENTSMATVEC");
 		V,Ainv = solveLinearSystem(H,V,Ainv,1);
 		if pFor.useFilesForFields
 			filename = getFieldsFileName(omega);

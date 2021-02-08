@@ -51,52 +51,60 @@ modelDir 	= pwd();
 ########################################################################################################
 
 ########## uncomment block for SEG ###############
-#
-# dim     = 2;
-# pad     = 30;
-# jumpSrc = 5;
-# jumpRcv = 1;
-# newSize = [600,300];
-#
-# # (m,Minv,mref,boundsHigh,boundsLow) = readModelAndGenerateMeshMref(modelDir,"../../SEGmodel2Dsalt.dat",dim,pad,[0.0,13.5,0.0,4.2],newSize,1.752,2.9);
+
+ dim     = 2;
+ pad     = 30;
+ jumpSrc = 5;
+ jumpRcv = 1;
+ newSize = [600,300];
+
+(m,Minv,mref,boundsHigh,boundsLow) = readModelAndGenerateMeshMref(modelDir,"examples/SEGmodel2Dsalt.dat",dim,pad,[0.0,13.5,0.0,4.2],newSize,1.752,2.9);
 # #(m,Minv,mref,boundsHigh,boundsLow) = readModelAndGenerateMeshMref(modelDir,"examples/SEGmodel2D_edges.dat",dim,pad,[0.0,13.5,0.0,4.2],newSize,1.752,2.9, false);
-# (m,Minv,mref,boundsHigh,boundsLow) = readModelAndGenerateMeshMref(modelDir,"examples/SEGmodel2D_up.dat",dim,pad,[0.0,13.5,0.0,4.2],newSize,1.752,2.9, false);
-# #omega = [2.0,2.5,3.0,3.5,4.5,5.5,6.5]*2*pi; #SEG
-# omega = Array(3.0:0.3:6.0)*2*pi;
-# offset  = newSize[1];  #ceil(Int64,(newSize[1]*(8.0/13.5)));
-# println("Offset is: ",offset," cells.")
+#(m,Minv,mref,boundsHigh,boundsLow) = readModelAndGenerateMeshMref(modelDir,"examples/SEGmodel2D_up.dat",dim,pad,[0.0,13.5,0.0,4.2],newSize,1.752,2.9, false);
+#omega = [2.0,2.5,3.0,3.5,4.5,5.5,6.5]*2*pi; #SEG
+#omega = [3.0,3.5,4.0,4.5,5.0,5.5,6.5]*2*pi; #SEG
+omega = [3.0,3.3,3.6,3.9,4.2,4.5,5.0,5.5,6.5]*2*pi; #SEG
+#omega = [3.5,3.8,4.1,4.5,5.5,6.5]*2*pi; #SEG
+#omega = Array(3.0:0.4:6.5)*2*pi;
+offset  = newSize[1];  #ceil(Int64,(newSize[1]*(8.0/13.5)));
+println("Offset is: ",offset," cells.")
 #
-# alpha1 = 5e-1;
-# alpha2 = 5e2;
-# # stepReg = 1e4; #1e2;#4e+3
+#alpha1 = 5e-1;
+alpha1 = 1e1;
+alpha2 = 3e1;
+# stepReg = 1e4; #1e2;#4e+3
 
 ##################################################
 
 
 ########## uncomment block for overthrust slice ###############
-
+#=
 include(string(FWIDriversPath,"generateMrefOverthrust.jl"));
 omega = [2.5,3.0,3.5,4.0,5.0]*2*pi; #Marmousi
 
 alpha1 = 5e2;
 alpha2 = 5e2;
 # stepReg = 1e4; #1e2;#4e+3
-
+=#
 #######################################################
 
 
 ########## uncomment block for marmousi ###############
+#=
+include(string(FWIDriversPath,"generateMrefMarmousi.jl"));
+omega = [3.0,3.5,4.5,6.0,8.0,8.5]*2*pi; #Marmousi
+#omega = [4.0,4.5,6.0,8.0,8.5]*2*pi; #Marmousi
 
-# include(string(FWIDriversPath,"generateMrefMarmousi.jl"));
-# omega = [2.0,2.5,3.5,4.5,6.0,8.0]*2*pi; #Marmousi
-#
-# alpha1 = 1e-1;
-# alpha2 = 1e1;
+alpha1 = 1e-1;
+alpha2 = 1e0;
 # stepReg = 1e4; #1e2;#4e+3
-
+=#
 #######################################################
 
-maxBatchSize = 24;
+figure(1,figsize = (22,10));
+plotModel(m,includeMeshInfo=true,M_regular = Minv,cutPad=pad,limits=[1.5,4.5],figTitle="orig",filename="orig3.png");
+
+maxBatchSize = 256;
 useFilesForFields = false;
 
 # ###################################################################################################################
@@ -110,7 +118,7 @@ resultsFilename = string(resultsFilename,".dat");
 println("omega*maximum(h): ",omega*maximum(Minv.h)*sqrt(maximum(1.0./(boundsLow.^2))));
 ABLpad = pad + 4;
 
-levels      = 3;
+levels      = 2;
 numCores 	= 16;
 BLAS.set_num_threads(numCores);
 maxIter     = 30;
@@ -124,22 +132,20 @@ coarseSolveType = "Julia";
 MG = getMGparam(ComplexF64,Int64,levels,numCores,maxIter,relativeTol,relaxType,relaxParam,relaxPre,relaxPost,cycleType,coarseSolveType,0.0,0.0);
 shift = 0.2;
 Hparam = HelmholtzParam(Minv,zeros(0),zeros(0),0.0,true,true);
-Ainv = getShiftedLaplacianMultigridSolver(Hparam, MG,shift,"BiCGSTAB",0,true);
+# Ainv = getShiftedLaplacianMultigridSolver(Hparam, MG,shift,"BiCGSTAB",0,true);
 
-# Ainv  = getParallelJuliaSolver(ComplexF32,UInt32,numCores=16,backend=3);
+Ainv  = getParallelJuliaSolver(ComplexF64,Int64,numCores=16,backend=3);
 
 workersFWI = workers();
 println(string("The workers that we allocate for FWI are:",workersFWI));
 
 
-figure(1,figsize = (22,10));
-plotModel(m,includeMeshInfo=true,M_regular = Minv,cutPad=pad,limits=[2.5,6.0],figTitle="orig",filename="orig.png");
 
 figure(2,figsize = (22,10));
-plotModel(mref,includeMeshInfo=true,M_regular = Minv,cutPad=pad,limits=[2.5,6.0],figTitle="mref",filename="mref2.png");
+plotModel(mref,includeMeshInfo=true,M_regular = Minv,cutPad=pad,limits=[1.5,4.5],figTitle="mref",filename="mref2.png");
 
-# prepareFWIDataFiles(m,Minv,mref,boundsHigh,boundsLow,dataFilenamePrefix,omega,ones(ComplexF64,size(omega)),
-# 									pad,ABLpad,jumpSrc,jumpRcv,offset,workersFWI,maxBatchSize,Ainv,useFilesForFields);
+prepareFWIDataFiles(m,Minv,mref,boundsHigh,boundsLow,dataFilenamePrefix,omega,ones(ComplexF64,size(omega)),
+									pad,ABLpad,jumpSrc,jumpRcv,offset,workersFWI,maxBatchSize,Ainv,useFilesForFields);
 
 
 
@@ -171,7 +177,7 @@ end
 ########################################################################################################################
 
 (Q,P,pMis,SourcesSubInd,contDiv,Iact,sback,mref,boundsHigh,boundsLow) =
-	setupFWI(m,dataFilenamePrefix,plotting,workersFWI,maxBatchSize,Ainv,SSDFun,useFilesForFields, true);
+	setupFWI(m,dataFilenamePrefix,plotting,workersFWI,maxBatchSize,Ainv,SSDFun,useFilesForFields, false);
 
 ########################################################################################################
 # Setting up the inversion for slowness instead of velocity:
@@ -194,9 +200,10 @@ function dump(mc,Dc,iter,pInv,PMis,resultsFilename)
 		figure(888,figsize = (22,10));
 		clf();
 		filename = splitdir(Temp)[2];
-		plotModel(fullMc,includeMeshInfo=true,M_regular = Minv,cutPad=pad,limits=[2.5,6.0],filename=filename,figTitle=filename);
+		plotModel(fullMc,includeMeshInfo=true,M_regular = Minv,cutPad=pad,limits=[1.5,4.5],filename=filename,figTitle=filename);
 	end
 end
+
 
 #####################################################################################################
 # Setting up the inversion for velocity:
@@ -214,11 +221,14 @@ modfun 		= identityMod;
 flush(Base.stdout)
 
 
+
 GN = "projGN"
 maxStep=0.05*maximum(boundsHigh);
+#regparams = [1.0,1.0,1.0,1e-6];
 regparams = [1.0,1.0,1.0,1e-6];
-# regfun(m,mref,M) 	= wdiffusionReg(m,mref,M,Iact=Iact,C=[]);
-regfun(m,mref,M) 	= wFourthOrderSmoothing(m,mref,M,Iact=Iact,C=[]);
+#regparams = [5.0,5.0,5.0,1e-6];
+regfun(m,mref,M) 	= wdiffusionReg(m,mref,M,Iact=Iact,C=[]);
+#regfun(m,mref,M) 	= wFourthOrderSmoothing(m,mref,M,Iact=Iact,C=[]);
 if dim==2
 	HesPrec=getExactSolveRegularizationPreconditioner();
 else
@@ -227,15 +237,16 @@ end
 
 alpha 	= 1e+2;
 pcgTol 	= 1e-1;
-maxit 	= 15;
+maxit 	= 10;
 cgit 	= 5;
+
+
 
 pInv = getInverseParam(Minv,modfun,regfun,alpha,mref[:],boundsLow,boundsHigh,
                          maxStep=maxStep,pcgMaxIter=cgit,pcgTol=pcgTol,
 						 minUpdate=1e-3, maxIter = maxit,HesPrec=HesPrec);
 dump(mref, 1, 1,  pInv, pMis, "mref2.png")
 mc = copy(mref[:]);
-
 
 
 function saveCheckpoint(resultsFilename,mc,Z1,Z2,alpha1,alpha2,pInv,cyc)
@@ -273,22 +284,44 @@ end
 
 
 
-
 ################ uncomment for regular FWI ##################
 
-# mc, = freqCont(mc, pInv, pMis,contDiv, 3,resultsFilename,dump,"",1,0,GN);
-# mc, = freqCont(mc, pInv, pMis,contDiv, 3,resultsFilename,dump,"",3,1,GN);
-# mc, = freqCont(mc, pInv, pMis,contDiv, 3,resultsFilename,dump,"",3,2,GN);
+println("LEN1: ", size(pMis[1:length(pMis)-2 * nworkers()]));
+pInv.maxIter = 20;
+println("LEN CONT DIV: ", size(contDiv));
+ mc, = freqCont(mc, pInv, pMis[1:length(pMis)- 2 * nworkers()],contDiv[1:length(contDiv)-5], 4,resultsFilename,dump,"",1,0,GN);
+
+ mc, = freqCont(mc, pInv, pMis[1:length(pMis)- 2 * nworkers()],contDiv[1:length(contDiv)-5], 4,resultsFilename,dump,"",1,1,GN);
+regparams = [1.0,1.0,1.0,1e-6];
+regfun(m,mref,M) 	= wdiffusionReg(m,mref,M,Iact=Iact,C=[]);
+#regfun(m,mref,M) 	= wFourthOrderSmoothing(m,mref,M,Iact=Iact,C=[]);
+if dim==2
+	HesPrec=getExactSolveRegularizationPreconditioner();
+else
+	HesPrec = getSSORCGFourthOrderRegularizationPreconditioner(regparams,Minv,Iact,1.0,1e-8,1000);
+end
+
+
+pInv.regularizer = regfun;
+pInv.maxIter = 15;
+pInv.pcgMaxIter = 5;
+pInv.alpha = 1e+2;
+pInv.HesPrec = HesPrec;
+
+ mc, = freqCont(mc, pInv, pMis,contDiv, 4,resultsFilename,dump,"",4,2,GN);
+ mc, = freqCont(mc, pInv, pMis,contDiv, 4,resultsFilename,dump,"",4,3,GN);
+pInv.maxIter = 100;
+ mc, = freqCont(mc, pInv, pMis,contDiv, 4,resultsFilename,dump,"",9,4,GN);
 
 #############################################################
-
+exit(1)
 
 N_nodes = prod(Minv.n.+1);
 nsrc = size(Q,2);
 p = 16;
 Z1 = 2e-4*rand(ComplexF64,(N_nodes, p));
 # Z2 = zeros(ComplexF64, (p, nsrc)); #0.01*rand(ComplexF64, (p, nsrc)) .+ 0.01;
-pInv.maxIter = 1;
+pInv.maxIter = 20;
 
 ############# uncomment for extended sources only ####################
 # Z2 = zeros(ComplexF64, (p, nsrc));
@@ -306,54 +339,124 @@ pInv.maxIter = 1;
 ############# uncomment for extended sources and simultaneous sources #########
 ts = time_ns();
 simSrcDim = 16;
+#simSrcDim = 1;
 Z2 = 0.1*rand(ComplexF64, (p, simSrcDim)) .+ 0.01;
 #Z2 = 0.1*rand(ComplexF64, (p, nsrc)) .+ 0.01;
-#simSrcDim = 1;
 windowSize = 4;
 updateMref = false;
+
+#mc, = freqCont(mc, Q, size(P,2), simSrcDim,SourcesSubInd, pInv, pMis[1:length(pMis) - 5 * nworkers()],contDiv[1:length(contDiv)-5], 4,resultsFilename,dump,"",1,0,GN);
+#exit(1)
 #####################################################################################################
+
 #cyc = 0;startFrom = 4;endAtContDiv = length(omega)-1;
-cyc = 0;startFrom = 1;endAtContDiv = length(omega)-2;
-#=
-mc,Z1,Z2,alpha1,alpha2, = freqContExtendedSourcesSSFreqOnlySplit(mc,Z1,Z2,simSrcDim,10,Q,size(P,2),
+#cyc = 0;startFrom = 1;endAtContDiv = length(omega)- 4;
+cyc = 0;startFrom = 1;endAtContDiv = 4;
+println("CYCLE 0");
+
+mc,Z1,Z2,alpha1,alpha2, = freqContExtendedSourcesSSFreqOnlySplit(mc,Z1,Z2,simSrcDim,20,Q,size(P,2),
 				pInv, pMis, windowSize,resultsFilename,dump,Iact,sback,alpha1,alpha2,"",startFrom,endAtContDiv,cyc,GN,updateMref);
+exit(1)
+cyc = 1;
+Z1 = 2e-4*rand(ComplexF64,(N_nodes, p));
+alpha1 = 1e1;
+alpha2 = 3e1;
+mc,Z1,Z2,alpha1,alpha2, = freqContExtendedSourcesSSFreqOnlySplit(mc,Z1,Z2,simSrcDim,20,Q,size(P,2),
+				pInv, pMis, windowSize,resultsFilename,dump,Iact,sback,alpha1,alpha2,"",startFrom,endAtContDiv,cyc,GN,updateMref);
+
 # mc,Z1,Z2,alpha1,alpha2, = freqContExtendedSourcesSS(mc,Z1,Z2,simSrcDim,10,Q,size(P,2),
 # 				SourcesSubInd,pInv, pMis,contDiv, windowSize,resultsFilename,dump,Iact,sback,alpha1,alpha2,"",startFrom,endAtContDiv,cyc,GN,updateMref);
 saveCheckpoint(resultsFilename,mc,Z1,Z2,alpha1,alpha2,pInv,cyc);
-=#
+
 #=
 #####################################################################################################
 endAtContDiv = length(contDiv)-1
 #####################################################################################################
-pInv.alpha /= 100
+pInv.alpha /= 10
 
 # mc,Z1,Z2,alpha1,alpha2,pInv.alpha,pInv.mref = loadCheckpoint(resultsFilename,cyc);
 cyc = 1;startFrom = windowSize;
-mc,Z1,Z2,alpha1,alpha2, = freqContExtendedSourcesSS(mc,Z1,Z2,simSrcDim,15,Q,size(P,2),
+mc,Z1,Z2,alpha1,alpha2, = freqContExtendedSourcesSS(mc,Z1,Z2,simSrcDim,10,Q,size(P,2),
 				SourcesSubInd, pInv, pMis,contDiv, windowSize,resultsFilename,dump,Iact,sback,alpha1,alpha2,"",startFrom,endAtContDiv,cyc,GN,updateMref);
 saveCheckpoint(resultsFilename,mc,Z1,Z2,alpha1,alpha2,pInv,cyc);
 =#
 #####################################################################################################
 
+(Q,P,pMis,SourcesSubInd,contDiv,Iact,sback,mref,boundsHigh,boundsLow) =
+	setupFWI(m,dataFilenamePrefix,plotting,workersFWI,maxBatchSize,Ainv,SSDFun,useFilesForFields, false);
+
+#####################################################################################################
+# Setting up the inversion for velocity:
+#####################################################################################################
+mref 		= velocityToSlowSquared(mref)[1];
+t    		= copy(boundsLow);
+boundsLow 	= velocityToSlowSquared(boundsHigh)[1];
+boundsHigh 	= velocityToSlowSquared(t)[1]; t = 0;
+modfun 		= identityMod;
+
+pInv = getInverseParam(Minv,modfun,regfun,alpha,mref[:],boundsLow,boundsHigh,
+                         maxStep=maxStep,pcgMaxIter=cgit,pcgTol=pcgTol,
+						 minUpdate=1e-3, maxIter = maxit,HesPrec=HesPrec);
+
+
+pInv.maxIter = 15;
+#println("CYCLE 1");
+# mc, = freqCont(mc, pInv, pMis[1:length(pMis)- 2 * nworkers()],contDiv[1:length(contDiv)-4], 4,resultsFilename,dump,"",1,1,GN);
+
+
 updateMref = true;
-regfun(m,mref,M) = wdiffusionReg(m,mref,M,Iact=Iact,C=[]);
+regparams = [1.0,1.0,1.0,1e-6];
+regfun(m,mref,M) 	= wdiffusionReg(m,mref,M,Iact=Iact,C=[]);
+# regfun(m,mref,M) 	= wFourthOrderSmoothing(m,mref,M,Iact=Iact,C=[]);
+if dim==2
+	HesPrec=getExactSolveRegularizationPreconditioner();
+else
+	HesPrec = getSSORCGFourthOrderRegularizationPreconditioner(regparams,Minv,Iact,1.0,1e-8,1000);
+end
+
+newReg(m,mref,M) 	= wTVReg(m,mref,M,Iact=Iact,C=[]);
+#pInv.regularizer = newReg;
 pInv.regularizer = regfun;
 #####################################################################################################
-pInv.maxIter = 10;
-mc,Z1,Z2,alpha1,alpha2,pInv.alpha,pInv.mref = loadCheckpoint(resultsFilename,cyc);
-dump(mc, 1, 1,  pInv, pMis, "mc.png")
-# mc, = freqCont(mc, pInv, pMis,contDiv, 3,resultsFilename,dump,"",3,1,GN);
-mc, = freqCont(mc, Q, size(P,2), simSrcDim,SourcesSubInd, pInv, pMis,contDiv, 4,resultsFilename,dump,"",4,1,GN);
-mc, = freqCont(mc, Q, size(P,2), simSrcDim,SourcesSubInd, pInv, pMis,contDiv, 4,resultsFilename,dump,"",4,2,GN);
-#=
-mc,Z1,Z2,alpha1,alpha2,pInv.alpha,pInv.mref = loadCheckpoint(resultsFilename,cyc);
+pInv.maxIter = 15;
+pInv.pcgMaxIter = 5;
+# pInv.alpha /= 1000;
 
-cyc = 2;startFrom = windowSize;
-mc,Z1,Z2,alpha1,alpha2, = freqContExtendedSourcesSS(mc,Z1,Z2,simSrcDim,20,Q,size(P,2),
+
+
+#mc, = freqCont(mc, Q, size(P,2), simSrcDim,SourcesSubInd, pInv, pMis,contDiv, 4,resultsFilename,dump,"",4,0,GN);
+#mc,Z1,Z2,alpha1,alpha2,pInv.alpha,pInv.mref = loadCheckpoint(resultsFilename,cyc);
+#dump(mc, 1, 1,  pInv, pMis, "mc.png")
+println("LEN CONTDIV: ", size(contDiv));
+println("CYCLE 1");
+mc, = freqCont(mc, Q, size(P,2), simSrcDim,SourcesSubInd, pInv, pMis,contDiv, 4,resultsFilename,dump,"",4,2,GN);
+println("CYCLE 2");
+mc, = freqCont(mc, Q, size(P,2), simSrcDim,SourcesSubInd, pInv, pMis,contDiv, 4,resultsFilename,dump,"",4,3,GN);
+
+
+#pInv.maxIter = 10;
+pInv.pcgMaxIter = 10;
+
+pInv.maxIter = 100;
+println("CYCLE 3");
+mc, = freqCont(mc, Q, size(P,2), simSrcDim,SourcesSubInd, pInv, pMis,contDiv, 4,resultsFilename,dump,"",9,4,GN);
+
+#=
+cyc = 1;startFrom = windowSize;
+mc,Z1,Z2,alpha1,alpha2, = freqContExtendedSourcesSS(mc,Z1,Z2,simSrcDim,10,Q,size(P,2),
 				SourcesSubInd, pInv, pMis,contDiv, windowSize,resultsFilename,dump,Iact,sback,alpha1,alpha2,"",startFrom,endAtContDiv,cyc,GN,updateMref);
 saveCheckpoint(resultsFilename,mc,Z1,Z2,alpha1,alpha2,pInv,cyc);
 #####################################################################################################
+cyc = 2;startFrom = windowSize;
+mc,Z1,Z2,alpha1,alpha2, = freqContExtendedSourcesSS(mc,Z1,Z2,simSrcDim,10,Q,size(P,2),
+				SourcesSubInd, pInv, pMis,contDiv, windowSize,resultsFilename,dump,Iact,sback,alpha1,alpha2,"",startFrom,endAtContDiv,cyc,GN,updateMref);
+saveCheckpoint(resultsFilename,mc,Z1,Z2,alpha1,alpha2,pInv,cyc);
 
+
+
+
+
+#=
 newReg(m,mref,M) 	= wTVReg(m,mref,M,Iact=Iact,C=[]);
 pInv.regularizer = newReg;
 
@@ -365,6 +468,10 @@ saveCheckpoint(resultsFilename,mc,Z1,Z2,alpha1,alpha2,pInv,cyc);
 
 =#
 
+=#
+
+
+
 
 te = time_ns();
 
@@ -375,3 +482,4 @@ te = time_ns();
 
 println("runtime of inversion");
 println((ts - te)/1.0e9);
+

@@ -53,6 +53,7 @@ function getSensMatVec(v::Vector,m::Vector,pFor::FWIparam)
 			U = pFor.Fields[:,batchIdxs];
 		end
 		U = t.*U;
+		println("SOLVE LINEAR GET SENSMATVEC");
 		U,Ainv = solveLinearSystem(H,U,Ainv,0);
 		Jv[:,batchIdxs] = omega^2*(P'*U);
 	end

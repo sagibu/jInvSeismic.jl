@@ -24,6 +24,78 @@ using Multigrid.ParallelJuliaSolver
 		method      - "projGN" or "barrierGN"
 
 """
+function freqCont(mc, pInv::InverseParam, pMis::Array{RemoteChannel},contDiv::Array{Int64}, windowSize::Int64,
+			resultsFilename::String,dumpFun::Function,mode::String="",startFrom::Int64 = 1,cycle::Int64=0,method::String="projGN")
+Dc = 0;
+flag = -1;
+HIS = [];
+originalItersNum = pInv.maxIter;
+for freqIdx = startFrom:(length(contDiv)-1)
+#	if freqIdx == 1 && cycle == 0
+#		pInv.maxIter = 60
+#	else
+#		pInv.maxIter = originalItersNum;
+#	end
+
+	if mode=="1stInit"
+		reqIdx1 = freqIdx;
+		if freqIdx > 1
+			reqIdx1 = max(2,freqIdx-windowSize+1);
+		end
+		reqIdx2 = freqIdx;
+	else
+		reqIdx1 = freqIdx;
+		if freqIdx > 1
+			reqIdx1 = max(1,freqIdx-windowSize+1);
+		end
+		reqIdx2 = freqIdx;
+	end
+	currentProblems = contDiv[reqIdx1]:contDiv[reqIdx2+1]-1;
+	println("\n======= New Continuation Stage: selecting continuation batches: ",reqIdx1," to ",reqIdx2,"=======\n");
+	pMisTemp = pMis[currentProblems];
+	pInv.mref = mc[:];
+
+
+	if resultsFilename == ""
+		filename = "";
+		hisMatFileName = "";
+	else
+		Temp = splitext(resultsFilename);
+		if cycle==0
+			filename = string(Temp[1],"_FC",freqIdx,"_GN",Temp[2]);
+			hisMatFileName  = string(Temp[1],"_FC",freqIdx);
+		else
+			filename = string(Temp[1],"_Cyc",cycle,"_FC",freqIdx,"_GN",Temp[2]);
+			hisMatFileName  =  string(Temp[1],"_Cyc",cycle,"_FC",freqIdx);
+		end
+	end
+
+	# Here we set a dump function for GN for this iteracion of FC
+	function dumpGN(mc,Dc,iter,pInv,PF)
+		dumpFun(mc,Dc,iter,pInv,PF,filename);
+	end
+
+	if method == "projGN"
+		mc,Dc,flag,His = projGNCG(mc,pInv,pMisTemp,dumpResults = dumpGN);
+	elseif method == "barrierGN"
+		mc,Dc,flag,His = barrierGNCG(mc,pInv,pMisTemp,rho=1.0,dumpResults = dumpGN);
+	end
+
+	if hisMatFileName != ""
+		file = matopen(string(hisMatFileName,"_HisGN.mat"), "w");
+		### PUT THE CONTENT OF "HIS" INTO THE MAT FILE ###
+		His.Dc = [];
+		write(file,"His",His);
+		close(file);
+	end
+	His.Dc = []
+	push!(HIS,His)
+
+	clear!(pMisTemp);
+end
+return mc,Dc,flag,HIS;
+end
+
 function freqCont(mc, originalSources, nrcv, simSrcDim, sourcesSubInd, pInv::InverseParam, pMis::Array{RemoteChannel},contDiv::Array{Int64}, windowSize::Int64,
 			resultsFilename::String,dumpFun::Function,mode::String="",startFrom::Int64 = 1,cycle::Int64=0,method::String="projGN")
 Dc = 0;
@@ -214,10 +286,16 @@ end
 
 function MyPCG(A::Function,b::Array,x::Array,M::Array,numiter)
 r = b-A(x);
+hundred=false;
+if norm(r) > 20000
+	hundred=true;
+end
 z = M.*r;
 p = copy(z);
 norms = [norm(r)];
-
+if norms[1] > 100
+	numiter=20;
+end
 for k=1:numiter
 	Ap = A(p);
 	alpha = real(dot(z,r)/dot(p,Ap));
@@ -226,7 +304,8 @@ for k=1:numiter
 	r .-= alpha*Ap
 	z = M.*r
 	nn = norm(r);
-	if nn < 0.1 * norms[1] || nn < 1e-2
+	println("freqCont: New MYPCG CG iteration (cgiter123) rhs size: ", size(b), "residual is: ", nn);
+	if (nn < 0.1 * norms[1] || nn < 1e-2)
 		break
 	end
 	norms = [norms; nn];
@@ -311,10 +390,10 @@ function MultAll(m, avgWds, pMis, R, Z1, Z2, alpha, stepReg)
 		#sum += MultOpT(HPinvs[i], (avgWds[i]^2) .* MultOp(HPinvs[i], R, Z2), Z2)
 		sum += outer[i]
 	end
-	# eps = 1e-2
-	# return sum + (alpha./(abs.(Z1) .+ eps * maximum(abs.(Z1)))).*R + stepReg*R;
+	eps = 1e-2
+	return sum + (alpha./(abs.(Z1) .+ eps * maximum(abs.(Z1)))).*R + stepReg*R;
 
-	return sum + (alpha + stepReg)*R;
+	#return sum + (alpha + stepReg)*R;
 end
 
 function calculateZ1(m, misfitCalc::Function, nfreq::Integer, mergedWd::Array, mergedRc::Array, pMis::Array, Z1::Matrix,Z2::Matrix, alpha1::Float64,stepReg::Float64)
@@ -357,15 +436,15 @@ function calculateZ1(m, misfitCalc::Function, nfreq::Integer, mergedWd::Array, m
 	rhs .+= (stepReg) .* Z1
 
 	OP = x-> MultAll(m, mean.(real.(mergedWd)), pMis, x, Z1, Z2, alpha1, stepReg);
-	eps = 1e-2
+	eps = 10.0
 	#M = zeros((size(Z1,1), 1))
 	#for i=1:size(M,1)
 	#	vec = zeros((size(Z1,1), 1))
 	#	vec[i] = 1
 	#	M[i] = 1.0 / OP(vec)[i]
 	#end
-	M = ones(size(Z1))
-	# M = (abs.(Z1) .+ eps * maximum(abs.(Z1)));
+	# M = ones(size(Z1))
+	M = (abs.(Z1) .+ eps * maximum(abs.(Z1)));
 	t1=time_ns()
 	Z1, = MyPCG(OP,rhs,Z1,M,5);
 	e1=time_ns()
@@ -441,8 +520,8 @@ N_nodes = prod(pInv.MInv.n .+ 1);
 nsrc = size(originalSources, 2);
 
 doFiveBool = true
-stepReg = 0.0;
-println("~~~~~~~~~~~~~~~  FreqCont: Regs are: ",alpha1,",",alpha2,",",stepReg);
+stepReg = 1e3;
+println("~~~~~~~~~~~~~~~ UP1 FreqCont: Regs are: ",alpha1,",",alpha2,",",stepReg);
 
 p = size(Z1,2);
 nwork = nworkers()
@@ -651,7 +730,13 @@ for freqIdx = startFrom:endAtContDiv
 		e1 = time_ns();
 		print("runtime of GN:"); println((e1 - t1)/1.0e9);
 
-		mc = map(x -> x > 5.7 ? 6.0 : x, mc)
+		# mc = map(x -> x > 5.7 ? 6.0 : x, mc)
+		if cycle < 2
+			mc = map(x -> x > 3.0 ? 3.0 : x, mc)
+		else
+			mc = map(x -> x > 4.2 ? 4.5 : x, mc)
+
+		end
 
 		FafterGN = His.F[end];
 		println("Computed Misfit with new sources after GN : ",FafterGN);
@@ -697,14 +782,20 @@ N_nodes = prod(pInv.MInv.n .+ 1);
 nsrc = size(originalSources, 2);
 
 doFiveBool = true
-stepReg = 0.0;
-println("~~~~~~~~~~~~~~~  FreqCont: Regs are: ",alpha1,",",alpha2,",",stepReg);
+stepReg = 5e1;
+println("~~~~~~~~~~~~~~~ SEG1  FreqCont: Regs are: ",alpha1,",",alpha2,",",stepReg);
 
 p = size(Z1,2);
 nwork = nworkers()
 regfun = pInv.regularizer
-
+originalItersNum = itersNum
 for freqIdx = startFrom:endAtContDiv
+#	if freqIdx == 1 && cycle == 0
+#		itersNum = 70
+#	else
+#		itersNum = originalItersNum;
+#	end
+
 	if updateMref
 		pInv.mref = copy(mc[:]);
 	end
@@ -824,7 +915,7 @@ for freqIdx = startFrom:endAtContDiv
 			mis = misfitCalc2(mc,Z1,Z2,mergedWd ./ sqrt(simSrcDim) ,mergedRcReduced,nfreq,alpha1,alpha2, pMisHps);
 			obj = objectiveCalc2(Z1,Z2,mis,alpha1,alpha2);
 			println("After Z2: mis: ",mis,", obj: ",obj,", norm Z2 = ", norm(Z2)^2," norm Z1: ", norm(Z1)^2, ", [Time: ",(e1 - t1)/1.0e9," sec]")
-			if mis < 0.3 * initialMis
+			if mis < 0.8 * initialMis
 				break
 			end
 		end
@@ -838,16 +929,17 @@ for freqIdx = startFrom:endAtContDiv
 
 		println("Cyc ", cycle, " freqCont ", freqIdx, " iter ", j, ", %nzc ", nzc/prod(size(Z1)), ", %nzcm ", nzcm/prod(size(Z1)))
 
-		if mis / F_zero > 0.8
-                alpha1 = alpha1 / 1.2;
-                alpha2 = alpha2 / 1.2;
+		if mis / F_zero > 0.95
+#                alpha1 = alpha1 / 1.5;
+ #               alpha2 = alpha2 / 1.5;
                 println("Ratio mis/F_zero is: ",mis/F_zero,", hence decreasing alphas by 1.2: ",alpha1,",",alpha2);
 		end
 
-		#if mis / F_zero < 0.5
-                #alpha1 = alpha1*2;
-                #println("Ratio mis/F_zero is: ",mis/F_zero,", hence increasing alpha1 by 2: ",alpha1,",",alpha2);
-		#end
+		if mis / F_zero < 0.15
+                alpha1 = alpha1*1.5;
+                alpha2 = alpha2*1.5;
+                println("Ratio mis/F_zero is: ",mis/F_zero,", hence increasing alpha1 by 2: ",alpha1,",",alpha2);
+		end
 
 
 		newSources = originalSources * TEmat + Z1 * Z2;
@@ -883,8 +975,16 @@ for freqIdx = startFrom:endAtContDiv
 		e1 = time_ns();
 		print("runtime of GN:"); println((e1 - t1)/1.0e9);
 
-		mc = map(x -> x > 5.7 ? 6.0 : x, mc)
+		# mc = map(x -> x > 5.7 ? 6.0 : x, mc)
+		#mc = map(x -> x > 4.2 ? 4.5 : x, mc)
+		
+		if cycle < 2
+			mc = map(x -> x > 3.0 ? 3.0 : x, mc)
+		else
+			mc = map(x -> x > 4.2 ? 4.5 : x, mc)
 
+		end
+		
 		FafterGN = His.F[end];
 		println("Computed Misfit with new sources after GN : ",FafterGN);
 
