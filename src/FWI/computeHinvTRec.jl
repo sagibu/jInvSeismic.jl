@@ -55,15 +55,10 @@ end
 
 function computeHinvTRec(pMisRF::RemoteChannel, x, m, doTranspose)
 pMis = fetch(pMisRF)
-#H = calculateShiftedH(pMis, m)
 if doTranspose == 0
-	#HinvTP, = solveLinearSystem(H,x,pMis.pFor.ForwardSolver,doTranspose);
 	HinvTP, = solveLinearSystem(spzeros(ComplexF64,0,0),x,pMis.pFor.ForwardSolver,doTranspose);
-	#return complex(Matrix(pMis.pFor.Receivers')) * HinvTP;
 	return complex(pMis.pFor.Receivers' * HinvTP);
 else
-	#####HinvTP, = solveLinearSystem(H,complex(Matrix(pMis.pFor.Receivers) * x),pMis.pFor.ForwardSolver,doTranspose);
-	#HinvTP, = solveLinearSystem(H,complex(pMis.pFor.Receivers * x),pMis.pFor.ForwardSolver,doTranspose);
 	HinvTP, = solveLinearSystem(spzeros(ComplexF64,0,0),complex(pMis.pFor.Receivers * x),pMis.pFor.ForwardSolver,doTranspose);
 	return  HinvTP;
 end
@@ -74,12 +69,7 @@ HinvTRec = Array{Array{ComplexF64}}(undef,length(pMis))
 @sync begin
 		for k=1:length(pMis)
 	@async begin
-			println("CALCULATE HINVTREC on worker: ", pMis[k].where);
 			HinvTRec[k] = remotecall_fetch(computeHinvTRec,pMis[k].where,pMis[k],x, m,doTranspose);
-			println("DONE CALCULATE HINVTREC FOR: ", k);
-			#@time begin
-			#	HinvTRec[k] = computeHinvTRec(pMis[k],x, m,doTranspose);
-			#end
 		end
 	end
 end
@@ -92,9 +82,6 @@ HinvTRec = Array{Array{ComplexF64}}(undef,length(pMis))
 	for k=1:length(pMis)
 	@async begin
 			HinvTRec[k] = remotecall_fetch(computeHinvTRec,pMis[k].where,pMis[k],x[k], m,doTranspose);
-			#@time begin
-			#	HinvTRec[k] = computeHinvTRec(pMis[k],x[k], m,doTranspose);
-			#end
 		end
 	end
 end
