@@ -84,6 +84,7 @@ if chosenModel == SEG || chosenModel == UP
 	alpha2 = 1e2;
 	stepReg = 5e1;
 	EScycles = 2;
+	cgit = 7;
 
 	freqContSweeps = 5;
 	freqRanges = [(1,4), (1,4), (4,length(omega)), (4,length(omega)),
@@ -98,6 +99,7 @@ elseif chosenModel == MARMOUSI
 	alpha2 = 1e2;
 	stepReg = 5e1;
 	EScycles = 1;
+	cgit = 5;
 
 	freqContSweeps = 4;
 	freqRanges = [(1,4), (4,length(omega)), (4,length(omega)),
@@ -113,6 +115,7 @@ elseif chosenModel == OVERTHRUST
 	alpha2 = 5e2;
 	stepReg = 5e1;
 	EScycles = 1;
+	cgit = 5;
 
 	freqContSweeps = 4;
 	freqRanges = [(1,3), (4,length(omega)), (4,length(omega)),
@@ -227,9 +230,6 @@ end
 alpha 	= 1e+2;
 pcgTol 	= 1e-1;
 maxit 	= 10;
-cgit 	= 7;
-
-
 
 pInv = getInverseParam(Minv,modfun,regfunHigh,alpha,mref[:],boundsLow,boundsHigh,
                          maxStep=maxStep,pcgMaxIter=cgit,pcgTol=pcgTol,
