@@ -98,10 +98,6 @@ function getFWIparamFreqOnlySplit(omega::Array{Float64}, WaveletCoef::Array{Comp
 							Sources::Union{Vector{Float64},SparseMatrixCSC,Array{Float64,2}},
 							Receivers::Union{Vector{Float64},SparseMatrixCSC,Array{Float64,2}},
 							Mesh::RegularMesh, ForwardSolver::AbstractSolver, workerList::Array{Int64},forwardSolveBatchSize::Int64=size(Sources,2),useFilesForFields::Bool = false)
-
-	# continuationDivision = zeros(Int64,length(omega)+1);
-	# continuationDivision[1] = 1;
-
 	if workerList==[]
 		ActualWorkers = workers();
 	else
@@ -125,19 +121,10 @@ function getFWIparamInternalFreqOnly(omega::Float64, WaveletCoef::ComplexF64,gam
 							fields::Array{FieldsType}, Mesh::RegularMesh,
 							ForwardSolver:: AbstractSolver, forwardSolveBatchSize::Int64,
 							Workers::Int64, pFor::Array{RemoteChannel},startPF::Int64,useFilesForFields::Bool = false)
-	i = startPF; nextidx() = (idx=i; i+=1; idx)
 	nsrc  = size(Sources,2);
-	numWorkers = length(Workers);
-	# send out jobs
-	#@sync begin
-		#for p=Workers
-		#	@async begin
-					pFor[startPF] = initRemoteChannel(getFWIparamInternal,Workers, omega,WaveletCoef,  gamma, Sources, Receivers, fields, Mesh,
-																			copySolver(ForwardSolver),forwardSolveBatchSize,useFilesForFields);
-					wait(pFor[startPF]);
-		#	end
-		#end
-	#end
+	pFor[startPF] = initRemoteChannel(getFWIparamInternal,Workers, omega,WaveletCoef,  gamma, Sources, Receivers, fields, Mesh,
+															copySolver(ForwardSolver),forwardSolveBatchSize,useFilesForFields);
+	wait(pFor[startPF]);
 	return pFor # Array of Remote Refs
 end
 
@@ -180,60 +167,6 @@ function getFWIparamInternal(omega::Float64,WaveletCoef::ComplexF64,
 	return FWIparam(omega,WaveletCoef,gamma,Sources,Sources,Receivers,Fields,Mesh,ForwardSolver,forwardSolveBatchSize,Array{Int64}(undef,0),useFilesForFields)
 end
 
-# function setSourceSelection(pForRF::RemoteRef{Channel{Any}}, selection::Array{Int64,1})
-	# s = copy(selection);
-	# if minimum(s) < 1
-		# error("FWI: sources selection out of range");
-	# end
-	# pFor  = take!(pForRF);
-	# s = [];
-	# if isa(pFor,FWIparam)
-		# Sources = pFor.Sources
-		# if maximum(s)>size(Sources,2)
-			# s = s[s.<=size(Sources,2)];
-			# warn("FWI: reducing selection: s = s[s.<=size(Sources,2)]");
-		# end
-		# pFor.sourceSelection = s;
-	# end
-	# put!(pForRF,pFor);
-	# return s;
-# end
-
-
-# function setSourceSelectionRatio(pForRF::RemoteRef{Channel{Any}}, selectionRatio::Float64)
-	# if selectionRatio <= 0.0 || selectionRatio > 1.0
-		# error("selectionRatio has to be between 0 and 1");
-	# end
-	# if selectionRatio == 1.0
-		# return;
-	# end
-	# pFor  = take!(pForRF);
-	# s = [];
-	# if isa(pFor,FWIparam)
-		# Q = pFor.Sources
-		# s = randperm(size(Q,2))[1:ceil(Int64,size(Q,2)*selectionRatio)];
-		# pFor.sourceSelection = s;
-	# end
-	# put!(pForRF,pFor);
-	# return s;
-# end
-
-# function setSourceSelectionNum(pForRF::RemoteRef{Channel{Any}}, selectionNum::Int64)
-	# if selectionNum <= 0
-		# error("selectionNum has to be bigger than 1");
-	# end
-	# pFor  = take!(pForRF);
-	# s = [];
-	# if isa(pFor,FWIparam)
-		# Q = pFor.Sources
-		# s = randperm(size(Q,2))[1:selectionNum];
-		# pFor.sourceSelection = s;
-	# end
-	# put!(pForRF,pFor);
-	# return s;
-# end
-
-
 import jInv.Utils.clear!
 function clear!(pFor::FWIparam)
 	clear!(pFor.ForwardSolver);
@@ -245,7 +178,6 @@ end
 include("getData.jl")
 include("getSensMatVec.jl")
 include("getSensTMatVec.jl")
-include("solvers.jl")
 include("FourthOrderHesPrec.jl")
 include("freqCont.jl")
 include("timeDomainFWI.jl")
