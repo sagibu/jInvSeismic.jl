@@ -21,8 +21,6 @@ end
 boundsLow = read(file,"boundsLow");
 boundsHigh = read(file,"boundsHigh");
 
-#mref =  readdlm("FWI_ExtSrc(660, 330)_Cyc2_FC6_GN15.dat");
-#mref =  readdlm("FWI_ExtSrc(650, 250)_Cyc2_FC6_GN10.dat");
 mref =  read(file,"mref");
 close(file);
 
