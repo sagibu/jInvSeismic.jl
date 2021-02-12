@@ -227,7 +227,7 @@ end
 alpha 	= 1e+2;
 pcgTol 	= 1e-1;
 maxit 	= 10;
-cgit 	= 5;
+cgit 	= 7;
 
 
 
