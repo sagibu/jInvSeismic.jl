@@ -77,11 +77,6 @@ freqRanges = [(1,4), (1,4), (4,length(omega)), (4,length(omega)),
 regularizations = ["high", "high", "low", "low", "low"];
 GNiters = [40, 40, 15 ,15, 100];
 
-N_nodes = prod(Minv.n.+1);
-nsrc = size(Q,2);
-p = 16;
-Z1 = 2e-4*rand(ComplexF64,(N_nodes, p));
-
 # ###################################################################################################################
 dataFilenamePrefix = string(dataDir,"/DATA_",tuple((Minv.n)...));
 resultsFilename = string(resultsDir,"/FWI_",tuple((Minv.n)...));
@@ -173,6 +168,10 @@ pInv = getInverseParam(Minv,modfun,regfunHigh,alpha,mref[:],boundsLow,boundsHigh
 						 minUpdate=1e-3, maxIter = maxit,HesPrec=HesPrec);
 mc = copy(mref[:]);
 
+N_nodes = prod(Minv.n.+1);
+nsrc = size(Q,2);
+p = 16;
+Z1 = 2e-4*rand(ComplexF64,(N_nodes, p));
 
 function saveCheckpoint(resultsFilename,mc,Z1,Z2,alpha1,alpha2,pInv,cyc)
 	file = matopen(string(splitext(resultsFilename)[1],"_Cyc",cyc,"_checkpoint.mat"), "w");
