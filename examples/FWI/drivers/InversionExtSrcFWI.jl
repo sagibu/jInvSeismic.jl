@@ -75,7 +75,7 @@ freqContSweeps = 5;
 freqRanges = [(1,4), (1,4), (4,length(omega)), (4,length(omega)),
 		(length(omega), length(omega))];
 regularizations = ["high", "high", "low", "low", "low"];
-GNiters = [40, 40, 15 ,15, 100];
+GNiters = [50, 50, 15 ,15, 100];
 
 # ###################################################################################################################
 dataFilenamePrefix = string(dataDir,"/DATA_",tuple((Minv.n)...));
